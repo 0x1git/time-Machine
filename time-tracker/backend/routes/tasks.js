@@ -64,20 +64,44 @@ router.post('/', [
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { name, description, project, assignee, priority, estimatedHours, dueDate, tags } = req.body;
-
-    // Check if user has access to project
-    const projectDoc = await Project.findById(project);
+    const { name, description, project, assignee, priority, estimatedHours, dueDate, tags } = req.body;    // Check if user has access to project within their organization
+    const projectDoc = await Project.findOne({
+      _id: project,
+      organization: req.organizationId
+    }).populate('owner', 'name email').populate('members.user', 'name email');
+    
     if (!projectDoc) {
-      return res.status(404).json({ message: 'Project not found' });
+      console.log(`Project not found: ${project} in organization: ${req.organizationId}`);
+      return res.status(404).json({ 
+        message: 'Project not found',
+        details: 'The selected project does not exist or you do not have access to it within your organization.',
+        action: 'Please select a different project or contact your administrator.'
+      });
     }
 
-    const hasAccess = projectDoc.owner.toString() === req.user.id ||
-                     projectDoc.members.some(member => member.user.toString() === req.user.id);
+    const isOwner = projectDoc.owner._id.toString() === req.user.id;
+    const isMember = projectDoc.members.some(member => member.user._id.toString() === req.user.id);
+    const hasAccess = isOwner || isMember;
 
     if (!hasAccess) {
-      return res.status(403).json({ message: 'Access denied' });
-    }    const task = new Task({
+      console.log(`Access denied for user ${req.user.id} to project ${project}. Owner: ${projectDoc.owner._id}, Members: ${JSON.stringify(projectDoc.members.map(m => m.user._id))}`);
+      
+      // Create detailed error message
+      const ownerName = projectDoc.owner.name;
+      const memberNames = projectDoc.members.map(m => m.user.name).join(', ');
+      
+      return res.status(403).json({ 
+        message: 'Access denied to project',
+        details: `You are not authorized to create tasks in the project "${projectDoc.name}". Only the project owner and members can create tasks.`,
+        projectInfo: {
+          name: projectDoc.name,
+          owner: ownerName,
+          members: memberNames || 'No other members'
+        },
+        action: 'To create tasks in this project, you need to be added as a project member. Please contact the project owner or your administrator.',
+        solution: `Ask ${ownerName} (project owner) to add you to the project through the project management interface.`
+      });
+    }const task = new Task({
       name,
       description,
       organization: req.organizationId,
@@ -139,18 +163,36 @@ router.put('/:id', [auth, requireOrganization], async (req, res) => {
     const task = await Task.findOne({ 
       _id: req.params.id,
       organization: req.organizationId
-    }).populate('project');
+    }).populate('project', 'name owner members').populate('project.owner', 'name email').populate('project.members.user', 'name email');
 
     if (!task) {
-      return res.status(404).json({ message: 'Task not found' });
+      return res.status(404).json({ 
+        message: 'Task not found',
+        details: 'The task you are trying to update does not exist or you do not have access to it.',
+        action: 'Please refresh the page or contact your administrator.'
+      });
     }
 
     // Check if user has access to project
-    const hasAccess = task.project.owner.toString() === req.user.id ||
-                     task.project.members.some(member => member.user.toString() === req.user.id);
+    const isOwner = task.project.owner._id.toString() === req.user.id;
+    const isMember = task.project.members.some(member => member.user._id.toString() === req.user.id);
+    const hasAccess = isOwner || isMember;
 
     if (!hasAccess) {
-      return res.status(403).json({ message: 'Access denied' });
+      const ownerName = task.project.owner.name;
+      const memberNames = task.project.members.map(m => m.user.name).join(', ');
+      
+      return res.status(403).json({ 
+        message: 'Access denied',
+        details: `You are not authorized to update tasks in the project "${task.project.name}". Only the project owner and members can modify tasks.`,
+        projectInfo: {
+          name: task.project.name,
+          owner: ownerName,
+          members: memberNames || 'No other members'
+        },
+        action: 'To modify tasks in this project, you need to be added as a project member.',
+        solution: `Ask ${ownerName} (project owner) to add you to the project through the project management interface.`
+      });
     }
 
     const { name, description, project, assignee, status, priority, estimatedHours, dueDate, tags } = req.body;
@@ -203,24 +245,42 @@ router.delete('/:id', [auth, requireOrganization], async (req, res) => {
     const task = await Task.findOne({
       _id: req.params.id,
       organization: req.organizationId
-    }).populate('project');
+    }).populate('project', 'name owner members').populate('project.owner', 'name email').populate('project.members.user', 'name email');
 
     if (!task) {
-      return res.status(404).json({ message: 'Task not found' });
+      return res.status(404).json({ 
+        message: 'Task not found',
+        details: 'The task you are trying to delete does not exist or you do not have access to it.',
+        action: 'Please refresh the page or contact your administrator.'
+      });
     }
 
     // Check if user has access to project
-    const hasAccess = task.project.owner.toString() === req.user.id ||
-                     task.project.members.some(member => member.user.toString() === req.user.id);
+    const isOwner = task.project.owner._id.toString() === req.user.id;
+    const isMember = task.project.members.some(member => member.user._id.toString() === req.user.id);
+    const hasAccess = isOwner || isMember;
 
     if (!hasAccess) {
-      return res.status(403).json({ message: 'Access denied' });
+      const ownerName = task.project.owner.name;
+      const memberNames = task.project.members.map(m => m.user.name).join(', ');
+      
+      return res.status(403).json({ 
+        message: 'Access denied',
+        details: `You are not authorized to delete tasks in the project "${task.project.name}". Only the project owner and members can delete tasks.`,
+        projectInfo: {
+          name: task.project.name,
+          owner: ownerName,
+          members: memberNames || 'No other members'
+        },
+        action: 'To delete tasks in this project, you need to be added as a project member.',
+        solution: `Ask ${ownerName} (project owner) to add you to the project through the project management interface.`
+      });
     }
 
     task.isActive = false;
     await task.save();
 
-    res.json({ message: 'Task deleted' });
+    res.json({ message: 'Task deleted successfully' });
   } catch (error) {
     console.error(error.message);
     res.status(500).send('Server error');

@@ -448,6 +448,48 @@ const Projects = () => {
     }));
   };
 
+  // Helper function to display detailed error messages
+  const handleApiError = (error, defaultMessage) => {
+    if (error.response?.data) {
+      const errorData = error.response.data;
+      
+      if (errorData.details && errorData.action) {
+        // Show detailed error with action steps
+        toast.error(
+          <div>
+            <div style={{ fontWeight: 'bold', marginBottom: '8px' }}>{errorData.message}</div>
+            <div style={{ marginBottom: '8px' }}>{errorData.details}</div>
+            {errorData.projectInfo && (
+              <div style={{ marginBottom: '8px', fontSize: '0.9em' }}>
+                <strong>Project:</strong> {errorData.projectInfo.name}<br/>
+                <strong>Owner:</strong> {errorData.projectInfo.owner}<br/>
+                <strong>Members:</strong> {errorData.projectInfo.members}
+              </div>
+            )}
+            <div style={{ fontStyle: 'italic', color: '#666' }}>
+              {errorData.action}
+            </div>
+            {errorData.solution && (
+              <div style={{ marginTop: '8px', padding: '8px', background: '#f0f9ff', borderRadius: '4px', fontSize: '0.9em' }}>
+                <strong>Solution:</strong> {errorData.solution}
+              </div>
+            )}
+          </div>,
+          {
+            autoClose: 8000, // Show longer for detailed messages
+            style: { width: '400px' }
+          }
+        );
+      } else if (errorData.message) {
+        toast.error(errorData.message);
+      } else {
+        toast.error(defaultMessage);
+      }
+    } else {
+      toast.error(defaultMessage);
+    }
+  };
+
   // Project member management functions
   const openMembersModal = async (project) => {
     setSelectedProject(project);
