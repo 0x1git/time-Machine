@@ -54,6 +54,7 @@ router.get('/', [auth, requireOrganization], async (req, res) => {
 // @access  Private
 router.post('/', [
   auth,
+  requireOrganization,
   body('name').notEmpty().withMessage('Task name is required'),
   body('project').notEmpty().withMessage('Project is required'),
 ], async (req, res) => {
@@ -76,11 +77,10 @@ router.post('/', [
 
     if (!hasAccess) {
       return res.status(403).json({ message: 'Access denied' });
-    }
-
-    const task = new Task({
+    }    const task = new Task({
       name,
       description,
+      organization: req.organizationId,
       project,
       assignee,
       priority,

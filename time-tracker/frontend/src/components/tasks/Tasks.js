@@ -179,12 +179,169 @@ const AddButton = styled.button`
   }
 `;
 
+const Modal = styled.div`
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+`;
+
+const ModalContent = styled.div`
+  background: white;
+  border-radius: 12px;
+  padding: 24px;
+  width: 100%;
+  max-width: 500px;
+  margin: 20px;
+`;
+
+const ModalHeader = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+`;
+
+const ModalTitle = styled.h2`
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #2c3e50;
+`;
+
+const CloseButton = styled.button`
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  color: #6b7280;
+
+  &:hover {
+    color: #374151;
+  }
+`;
+
+const Form = styled.form`
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+`;
+
+const FormGroup = styled.div`
+  display: flex;
+  flex-direction: column;
+`;
+
+const Label = styled.label`
+  margin-bottom: 8px;
+  font-weight: 500;
+  color: #374151;
+`;
+
+const Input = styled.input`
+  padding: 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 14px;
+
+  &:focus {
+    outline: none;
+    border-color: #3498db;
+    box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+  }
+`;
+
+const Textarea = styled.textarea`
+  padding: 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 14px;
+  resize: vertical;
+  min-height: 100px;
+
+  &:focus {
+    outline: none;
+    border-color: #3498db;
+    box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+  }
+`;
+
+const Select = styled.select`
+  padding: 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 14px;
+  background: white;
+
+  &:focus {
+    outline: none;
+    border-color: #3498db;
+    box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+  }
+`;
+
+const ModalActions = styled.div`
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 24px;
+`;
+
+const Button = styled.button`
+  padding: 10px 16px;
+  border-radius: 6px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+
+  &.primary {
+    background: #3498db;
+    color: white;
+    border: none;
+
+    &:hover {
+      background: #2980b9;
+    }
+  }
+
+  &.secondary {
+    background: #f8f9fa;
+    color: #374151;
+    border: 1px solid #d1d5db;
+
+    &:hover {
+      background: #e9ecef;
+    }
+  }
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+`;
+
 const Tasks = () => {
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [showModal, setShowModal] = useState(false);
+  const [projects, setProjects] = useState([]);
+  const [formData, setFormData] = useState({
+    name: '',
+    description: '',
+    priority: 'medium',
+    status: 'todo',
+    projectId: '',
+    dueDate: ''
+  });
 
   useEffect(() => {
     fetchTasks();
+    fetchProjects();
   }, []);
 
   const fetchTasks = async () => {
@@ -197,6 +354,59 @@ const Tasks = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const fetchProjects = async () => {
+    try {
+      const response = await axios.get('/projects');
+      setProjects(response.data);
+    } catch (error) {
+      console.error('Error fetching projects:', error);
+    }
+  };
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    
+    if (!formData.projectId) {
+      toast.error('Please select a project');
+      return;
+    }
+    
+    try {
+      await axios.post('/tasks', {
+        ...formData,
+        project: formData.projectId
+      });
+      toast.success('Task created successfully');
+      fetchTasks();
+      closeModal();
+    } catch (error) {
+      toast.error('Failed to create task');
+      console.error('Error creating task:', error);
+    }
+  };
+
+  const openModal = () => {
+    setShowModal(true);
+  };
+
+  const closeModal = () => {
+    setShowModal(false);
+    setFormData({
+      name: '',
+      description: '',
+      priority: 'medium',
+      status: 'todo',
+      projectId: '',
+      dueDate: ''
+    });
+  };
+
+  const handleFormChange = (field, value) => {
+    setFormData(prev => ({
+      ...prev,
+      [field]: value
+    }));
   };
 
   const getStatusLabel = (status) => {
@@ -231,7 +441,7 @@ const Tasks = () => {
     <TasksContainer>
       <PageHeader>
         <PageTitle>Tasks</PageTitle>
-        <AddButton>
+        <AddButton onClick={openModal}>
           <FiPlus size={20} />
           New Task
         </AddButton>
@@ -295,6 +505,100 @@ const Tasks = () => {
         <div style={{ textAlign: 'center', padding: '64px 0', color: '#6b7280' }}>
           <p>No tasks found. Create your first task to get started!</p>
         </div>
+      )}
+
+      {showModal && (
+        <Modal>
+          <ModalContent>
+            <ModalHeader>
+              <ModalTitle>Create New Task</ModalTitle>
+              <CloseButton onClick={closeModal}>&times;</CloseButton>
+            </ModalHeader>
+
+            <Form onSubmit={handleSubmit}>
+              <FormGroup>
+                <Label htmlFor="task-name">Task Name</Label>
+                <Input
+                  id="task-name"
+                  value={formData.name}
+                  onChange={(e) => handleFormChange('name', e.target.value)}
+                  required
+                />
+              </FormGroup>
+
+              <FormGroup>
+                <Label htmlFor="task-description">Description</Label>
+                <Textarea
+                  id="task-description"
+                  value={formData.description}
+                  onChange={(e) => handleFormChange('description', e.target.value)}
+                />
+              </FormGroup>
+
+              <FormGroup>
+                <Label htmlFor="task-priority">Priority</Label>
+                <Select
+                  id="task-priority"
+                  value={formData.priority}
+                  onChange={(e) => handleFormChange('priority', e.target.value)}
+                >
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                  <option value="urgent">Urgent</option>
+                </Select>
+              </FormGroup>
+
+              <FormGroup>
+                <Label htmlFor="task-status">Status</Label>
+                <Select
+                  id="task-status"
+                  value={formData.status}
+                  onChange={(e) => handleFormChange('status', e.target.value)}
+                >
+                  <option value="todo">To Do</option>
+                  <option value="in-progress">In Progress</option>
+                  <option value="completed">Completed</option>
+                  <option value="on-hold">On Hold</option>
+                </Select>
+              </FormGroup>              <FormGroup>
+                <Label htmlFor="task-project">Project *</Label>
+                <Select
+                  id="task-project"
+                  value={formData.projectId}
+                  onChange={(e) => handleFormChange('projectId', e.target.value)}
+                  required
+                >
+                  <option value="">Select a project</option>
+                  {projects.map(project => (
+                    <option key={project._id} value={project._id}>
+                      {project.name}
+                    </option>
+                  ))}
+                </Select>
+              </FormGroup>
+
+              <FormGroup>
+                <Label htmlFor="task-due-date">Due Date</Label>
+                <Input
+                  id="task-due-date"
+                  type="date"
+                  value={formData.dueDate}
+                  onChange={(e) => handleFormChange('dueDate', e.target.value)}
+                />
+              </FormGroup>
+
+              <ModalActions>
+                <Button type="button" className="secondary" onClick={closeModal}>
+                  Cancel
+                </Button>
+                <Button type="submit" className="primary">
+                  Create Task
+                </Button>
+              </ModalActions>
+            </Form>
+          </ModalContent>
+        </Modal>
       )}
     </TasksContainer>
   );
