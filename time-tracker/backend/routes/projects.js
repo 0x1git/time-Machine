@@ -56,6 +56,21 @@ router.post('/', [
 
     const { name, description, color, deadline, budget, currency } = req.body;
 
+    // Get user's team role to use for project membership
+    const Team = require('../models/Team');
+    const userTeam = await Team.findOne({
+      organization: req.organizationId,
+      'members.user': req.user.id
+    });
+
+    let userTeamRole = 'admin'; // Default for project owners
+    if (userTeam) {
+      const teamMember = userTeam.members.find(member => member.user.toString() === req.user.id);
+      if (teamMember) {
+        userTeamRole = teamMember.role;
+      }
+    }
+
     const project = new Project({
       name,
       description,
@@ -65,7 +80,16 @@ router.post('/', [
       deadline,
       budget,
       currency,
-      members: [{ user: req.user.id, role: 'admin' }]
+      members: [{ 
+        user: req.user.id, 
+        teamRole: userTeamRole,
+        permissions: {
+          canCreateProjects: true,
+          canManageTeam: true,
+          canViewReports: true,
+          canManageTasks: true
+        }
+      }]
     });
 
     await project.save();
@@ -74,8 +98,12 @@ router.post('/', [
 
     res.status(201).json(project);
   } catch (error) {
-    console.error(error.message);
-    res.status(500).send('Server error');
+    console.error('Project creation error:', error.message);
+    res.status(500).json({ 
+      message: 'Failed to create project',
+      details: error.message,
+      action: 'Please ensure you are a member of a team in your organization before creating projects.'
+    });
   }
 });
 
