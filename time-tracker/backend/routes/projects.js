@@ -123,16 +123,14 @@ router.put('/:id', [auth, requireOrganization], async (req, res) => {
 
     if (!project) {
       return res.status(404).json({ message: 'Project not found' });
-    }
-
-    // Check if user is owner or admin member
+    }    // Check if user is owner or has admin/manager role
     const isOwner = project.owner.toString() === req.user.id;
-    const isAdmin = project.members.some(member => 
-      member.user.toString() === req.user.id && member.role === 'admin'
+    const isAdminOrManager = project.members.some(member => 
+      member.user.toString() === req.user.id && ['admin', 'manager'].includes(member.teamRole)
     );
     const canManageAll = req.user.permissions?.canManageAllProjects;
 
-    if (!isOwner && !isAdmin && !canManageAll) {
+    if (!isOwner && !isAdminOrManager && !canManageAll) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
@@ -162,7 +160,7 @@ router.put('/:id', [auth, requireOrganization], async (req, res) => {
 router.post('/:id/members', [
   auth,
   requireOrganization,
-  body('email').isEmail().withMessage('Valid email is required'),
+  body('userId').notEmpty().withMessage('User ID is required'),
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -179,25 +177,45 @@ router.post('/:id/members', [
       return res.status(404).json({ message: 'Project not found' });
     }
 
-    // Check if user is owner or admin member
+    // Check if user is owner or has admin/manager role in team
     const isOwner = project.owner.toString() === req.user.id;
-    const isAdmin = project.members.some(member => 
-      member.user.toString() === req.user.id && member.role === 'admin'
+    const isAdminOrManager = project.members.some(member => 
+      member.user.toString() === req.user.id && ['admin', 'manager'].includes(member.teamRole)
     );
 
-    if (!isOwner && !isAdmin) {
+    if (!isOwner && !isAdminOrManager) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
-    const { email, role = 'member' } = req.body;
+    const { userId } = req.body;
 
-    // Find user by email
+    // Find user by ID and ensure they're in the same organization
     const User = require('../models/User');
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ 
+      _id: userId, 
+      organization: req.organizationId,
+      isActive: true 
+    });
 
     if (!user) {
-      return res.status(404).json({ message: 'User not found' });
+      return res.status(404).json({ message: 'User not found in organization' });
     }
+
+    // Find user's team role and permissions
+    const Team = require('../models/Team');
+    const team = await Team.findOne({
+      organization: req.organizationId,
+      'members.user': userId,
+      isActive: true
+    });
+
+    if (!team) {
+      return res.status(400).json({ message: 'User must be a team member to be added to projects' });
+    }
+
+    const teamMember = team.members.find(member => 
+      member.user.toString() === userId
+    );
 
     // Check if user is already a member
     const isMember = project.members.some(member => 
@@ -208,7 +226,17 @@ router.post('/:id/members', [
       return res.status(400).json({ message: 'User is already a member' });
     }
 
-    project.members.push({ user: user._id, role });
+    // Check if user is the owner
+    if (project.owner.toString() === user._id.toString()) {
+      return res.status(400).json({ message: 'User is already the project owner' });
+    }
+
+    // Add member with their team role and permissions
+    project.members.push({ 
+      user: user._id, 
+      teamRole: teamMember.role,
+      permissions: teamMember.permissions
+    });
     await project.save();
     await project.populate('members.user', 'name email');
 
@@ -263,15 +291,13 @@ router.delete('/:id/members/:userId', [auth, requireOrganization], async (req, r
 
     if (!project) {
       return res.status(404).json({ message: 'Project not found' });
-    }
-
-    // Check if user is owner or admin member
+    }    // Check if user is owner or has admin/manager role
     const isOwner = project.owner.toString() === req.user.id;
-    const isAdmin = project.members.some(member => 
-      member.user.toString() === req.user.id && member.role === 'admin'
+    const isAdminOrManager = project.members.some(member => 
+      member.user.toString() === req.user.id && ['admin', 'manager'].includes(member.teamRole)
     );
 
-    if (!isOwner && !isAdmin) {
+    if (!isOwner && !isAdminOrManager) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
@@ -300,64 +326,6 @@ router.delete('/:id/members/:userId', [auth, requireOrganization], async (req, r
   }
 });
 
-// @route   PUT /api/projects/:id/members/:userId/role
-// @desc    Update member role in project
-// @access  Private
-router.put('/:id/members/:userId/role', [
-  auth,
-  requireOrganization,
-  body('role').isIn(['admin', 'member']).withMessage('Valid role is required'),
-], async (req, res) => {
-  try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
-
-    const project = await Project.findOne({ 
-      _id: req.params.id, 
-      organization: req.organizationId 
-    });
-
-    if (!project) {
-      return res.status(404).json({ message: 'Project not found' });
-    }
-
-    // Check if user is owner or admin member
-    const isOwner = project.owner.toString() === req.user.id;
-    const isAdmin = project.members.some(member => 
-      member.user.toString() === req.user.id && member.role === 'admin'
-    );
-
-    if (!isOwner && !isAdmin) {
-      return res.status(403).json({ message: 'Access denied' });
-    }
-
-    // Find member to update
-    const member = project.members.find(member => 
-      member.user.toString() === req.params.userId
-    );
-
-    if (!member) {
-      return res.status(404).json({ message: 'Member not found in project' });
-    }
-
-    // Cannot change role of project owner
-    if (project.owner.toString() === req.params.userId) {
-      return res.status(400).json({ message: 'Cannot change role of project owner' });
-    }
-
-    member.role = req.body.role;
-    await project.save();
-    await project.populate('members.user', 'name email');
-
-    res.json({ message: 'Member role updated', project });
-  } catch (error) {
-    console.error(error.message);
-    res.status(500).send('Server error');
-  }
-});
-
 // @route   GET /api/projects/:id/available-members
 // @desc    Get team members that can be added to project
 // @access  Private
@@ -377,24 +345,46 @@ router.get('/:id/available-members', [auth, requireOrganization], async (req, re
     const isMember = project.members.some(member => 
       member.user.toString() === req.user.id
     );
-    const canViewAll = req.user.permissions?.canViewAllProjects;
-
-    if (!isOwner && !isMember && !canViewAll) {
+    const canViewAll = req.user.permissions?.canViewAllProjects;    if (!isOwner && !isMember && !canViewAll) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
-    // Get all users in the organization
-    const User = require('../models/User');
-    const allUsers = await User.find({ 
+    // Get team members from the organization
+    const Team = require('../models/Team');
+    const teams = await Team.find({ 
       organization: req.organizationId,
       isActive: true 
-    }).select('name email');
+    }).populate('members.user', 'name email');
+
+    // Collect all team members
+    const allTeamMembers = [];
+    teams.forEach(team => {
+      team.members.forEach(member => {
+        if (member.user && member.user.isActive !== false) {
+          allTeamMembers.push({
+            _id: member.user._id,
+            name: member.user.name,
+            email: member.user.email,
+            teamRole: member.role
+          });
+        }
+      });
+    });
+
+    // Remove duplicates (users can be in multiple teams)
+    const uniqueMembers = allTeamMembers.reduce((acc, current) => {
+      const exists = acc.find(member => member._id.toString() === current._id.toString());
+      if (!exists) {
+        acc.push(current);
+      }
+      return acc;
+    }, []);
 
     // Filter out users who are already project members
     const projectMemberIds = project.members.map(member => member.user.toString());
     projectMemberIds.push(project.owner.toString()); // Include owner
 
-    const availableMembers = allUsers.filter(user => 
+    const availableMembers = uniqueMembers.filter(user => 
       !projectMemberIds.includes(user._id.toString())
     );
 

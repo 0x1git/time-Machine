@@ -27,16 +27,33 @@ const projectSchema = new mongoose.Schema({
   team: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Team'
-  },
-  members: [{
+  },  members: [{
     user: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User'
     },
-    role: {
+    teamRole: {
       type: String,
-      enum: ['admin', 'member'],
-      default: 'member'
+      enum: ['admin', 'manager', 'member'],
+      required: true
+    },
+    permissions: {
+      canCreateProjects: {
+        type: Boolean,
+        default: false
+      },
+      canManageTeam: {
+        type: Boolean,
+        default: false
+      },
+      canViewReports: {
+        type: Boolean,
+        default: true
+      },
+      canManageTasks: {
+        type: Boolean,
+        default: false
+      }
     },
     joinedAt: {
       type: Date,

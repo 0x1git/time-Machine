@@ -304,14 +304,6 @@ const MemberEmail = styled.span`
   color: #6b7280;
 `;
 
-const RoleSelect = styled.select`
-  padding: 4px 8px;
-  border: 1px solid #d1d5db;
-  border-radius: 4px;
-  margin-right: 8px;
-  font-size: 0.875rem;
-`;
-
 const RemoveButton = styled.button`
   background: #e74c3c;
   color: white;
@@ -334,16 +326,22 @@ const AddMemberForm = styled.form`
   border-top: 1px solid #e5e7eb;
 `;
 
-const MemberInput = styled.input`
+const MemberSelect = styled.select`
   flex: 1;
   padding: 8px 12px;
   border: 1px solid #d1d5db;
   border-radius: 4px;
   font-size: 0.875rem;
+  background: white;
 
   &:focus {
     outline: none;
     border-color: #3498db;
+  }
+
+  &:disabled {
+    background: #f3f4f6;
+    cursor: not-allowed;
   }
 `;
 
@@ -359,10 +357,8 @@ const Projects = () => {
     name: '',
     description: '',
     color: '#3498db'
-  });
-  const [memberForm, setMemberForm] = useState({
-    email: '',
-    role: 'member'
+  });  const [memberForm, setMemberForm] = useState({
+    userId: ''
   });
   
   const permissions = usePermissions();
@@ -463,60 +459,56 @@ const Projects = () => {
       toast.error('Failed to load available members');
       console.error('Error fetching available members:', error);
     }
-  };
-
-  const closeMembersModal = () => {
+  };  const closeMembersModal = () => {
     setShowMembersModal(false);
     setSelectedProject(null);
-    setMemberForm({ email: '', role: 'member' });
-  };
-
-  const addMember = async (e) => {
+    setMemberForm({ userId: '' });
+    setAvailableMembers([]);
+  };  const addMember = async (e) => {
     e.preventDefault();
+    
+    if (!memberForm.userId) {
+      toast.error('Please select a member to add');
+      return;
+    }
+
     try {
-      await axios.post(`/projects/${selectedProject._id}/members`, memberForm);
+      const response = await axios.post(`/projects/${selectedProject._id}/members`, { userId: memberForm.userId });
       toast.success('Member added successfully');
+      
+      // Update the selected project with the new data
+      setSelectedProject(response.data);
       
       // Refresh project data and available members
       fetchProjects();
-      const response = await axios.get(`/projects/${selectedProject._id}/available-members`);
-      setAvailableMembers(response.data);
-      setMemberForm({ email: '', role: 'member' });
+      const availableMembersResponse = await axios.get(`/projects/${selectedProject._id}/available-members`);
+      setAvailableMembers(availableMembersResponse.data);
+      setMemberForm({ userId: '' });
     } catch (error) {
       toast.error(error.response?.data?.message || 'Failed to add member');
       console.error('Error adding member:', error);
     }
   };
-
   const removeMember = async (userId) => {
     if (!window.confirm('Are you sure you want to remove this member from the project?')) {
       return;
     }
 
     try {
-      await axios.delete(`/projects/${selectedProject._id}/members/${userId}`);
+      const response = await axios.delete(`/projects/${selectedProject._id}/members/${userId}`);
       toast.success('Member removed successfully');
-      fetchProjects();
       
-      // Refresh available members
-      const response = await axios.get(`/projects/${selectedProject._id}/available-members`);
-      setAvailableMembers(response.data);
+      // Update the selected project with the new data
+      setSelectedProject(response.data.project);
+      
+      // Refresh projects list and available members
+      fetchProjects();
+      const availableMembersResponse = await axios.get(`/projects/${selectedProject._id}/available-members`);
+      setAvailableMembers(availableMembersResponse.data);
     } catch (error) {
       toast.error(error.response?.data?.message || 'Failed to remove member');
       console.error('Error removing member:', error);
-    }
-  };
-
-  const updateMemberRole = async (userId, newRole) => {
-    try {
-      await axios.put(`/projects/${selectedProject._id}/members/${userId}/role`, { role: newRole });
-      toast.success('Member role updated successfully');
-      fetchProjects();
-    } catch (error) {
-      toast.error(error.response?.data?.message || 'Failed to update member role');
-      console.error('Error updating member role:', error);
-    }
-  };
+    }  };
 
   if (loading) {
     return (
@@ -644,20 +636,14 @@ const Projects = () => {
               <h3 style={{ marginBottom: '16px', color: '#2c3e50' }}>Current Members</h3>
               <MembersList>
                 {selectedProject.members?.map((member) => (
-                  <MemberItem key={member._id}>
-                    <MemberInfo>
+                  <MemberItem key={member._id}>                    <MemberInfo>
                       <MemberName>{member.user?.name || 'Unknown'}</MemberName>
                       <MemberEmail>{member.user?.email || 'Unknown'}</MemberEmail>
+                      <div style={{ fontSize: '0.75rem', color: '#8b5cf6', fontWeight: '500', marginTop: '4px' }}>
+                        Team Role: {member.teamRole || 'Unknown'}
+                      </div>
                     </MemberInfo>
                     <div style={{ display: 'flex', alignItems: 'center' }}>
-                      <RoleSelect
-                        value={member.role}
-                        onChange={(e) => updateMemberRole(member.user._id, e.target.value)}
-                        disabled={selectedProject.owner === member.user._id}
-                      >
-                        <option value="member">Member</option>
-                        <option value="admin">Admin</option>
-                      </RoleSelect>
                       {selectedProject.owner !== member.user._id && (
                         <RemoveButton onClick={() => removeMember(member.user._id)}>
                           Remove
@@ -670,24 +656,22 @@ const Projects = () => {
                   <p style={{ color: '#6b7280', textAlign: 'center', padding: '20px' }}>No members assigned to this project.</p>
                 )}
               </MembersList>
-            </div>
-
-            <AddMemberForm onSubmit={addMember}>
-              <MemberInput
-                type="email"
-                value={memberForm.email}
-                onChange={(e) => setMemberForm({ ...memberForm, email: e.target.value })}
-                placeholder="Enter member's email"
+            </div>            <AddMemberForm onSubmit={addMember}>
+              <MemberSelect
+                value={memberForm.userId}
+                onChange={(e) => setMemberForm({ ...memberForm, userId: e.target.value })}
                 required
-              />
-              <RoleSelect
-                value={memberForm.role}
-                onChange={(e) => setMemberForm({ ...memberForm, role: e.target.value })}
+                disabled={availableMembers.length === 0}
               >
-                <option value="member">Member</option>
-                <option value="admin">Admin</option>
-              </RoleSelect>
-              <Button type="submit" className="primary">
+                <option value="">                  {availableMembers.length === 0 ? 'No available team members' : 'Select a team member to add'}
+                </option>
+                {availableMembers.map((member) => (
+                  <option key={member._id} value={member._id}>
+                    {member.name} ({member.email}) - {member.teamRole}
+                  </option>
+                ))}
+              </MemberSelect>
+              <Button type="submit" className="primary" disabled={availableMembers.length === 0}>
                 Add Member
               </Button>
             </AddMemberForm>
