@@ -379,10 +379,10 @@ const InvitationRole = styled.span`
   color: #a16207;
 `;
 
-const Teams = () => {
-  const [teams, setTeams] = useState([]);
+const Teams = () => {  const [teams, setTeams] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [selectedTeam, setSelectedTeam] = useState(null);
   const [invitations, setInvitations] = useState([]);
@@ -478,6 +478,35 @@ const Teams = () => {
     setInviteForm({ email: '', role: 'member' });
   };
 
+  const openEditModal = (team) => {
+    setSelectedTeam(team);
+    setTeamForm({
+      name: team.name,
+      description: team.description || ''
+    });
+    setShowEditModal(true);
+  };
+
+  const closeEditModal = () => {
+    setShowEditModal(false);
+    setSelectedTeam(null);
+    setTeamForm({ name: '', description: '' });
+  };
+
+  const handleEditTeam = async (e) => {
+    e.preventDefault();
+    
+    try {
+      await axios.put(`/teams/${selectedTeam._id}`, teamForm);
+      toast.success('Team updated successfully');
+      fetchTeams();
+      closeEditModal();
+    } catch (error) {
+      toast.error('Failed to update team');
+      console.error('Error updating team:', error);
+    }
+  };
+
   const getInitials = (name) => {
     return name
       .split(' ')
@@ -515,7 +544,10 @@ const Teams = () => {
                 >
                   <FiUserPlus size={16} />
                 </IconButton>
-                <IconButton title="Edit team">
+                <IconButton 
+                  title="Edit team"
+                  onClick={() => openEditModal(team)}
+                >
                   <FiEdit size={16} />
                 </IconButton>
               </TeamActions>
@@ -591,6 +623,51 @@ const Teams = () => {
                 </Button>
                 <Button type="submit" className="primary">
                   Create Team
+                </Button>
+              </ModalActions>
+            </Form>
+          </ModalContent>
+        </Modal>
+      )}
+
+      {/* Edit Team Modal */}
+      {showEditModal && selectedTeam && (
+        <Modal>
+          <ModalContent>
+            <ModalHeader>
+              <ModalTitle>Edit Team</ModalTitle>
+              <CloseButton onClick={closeEditModal}>
+                <FiX size={20} />
+              </CloseButton>
+            </ModalHeader>
+
+            <Form onSubmit={handleEditTeam}>
+              <FormGroup>
+                <Label>Team Name</Label>
+                <Input
+                  type="text"
+                  value={teamForm.name}
+                  onChange={(e) => setTeamForm({ ...teamForm, name: e.target.value })}
+                  placeholder="Enter team name"
+                  required
+                />
+              </FormGroup>
+
+              <FormGroup>
+                <Label>Description</Label>
+                <Textarea
+                  value={teamForm.description}
+                  onChange={(e) => setTeamForm({ ...teamForm, description: e.target.value })}
+                  placeholder="Enter team description (optional)"
+                />
+              </FormGroup>
+
+              <ModalActions>
+                <Button type="button" className="secondary" onClick={closeEditModal}>
+                  Cancel
+                </Button>
+                <Button type="submit" className="primary">
+                  Update Team
                 </Button>
               </ModalActions>
             </Form>

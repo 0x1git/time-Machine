@@ -2,16 +2,41 @@ const nodemailer = require('nodemailer');
 
 class EmailService {
   constructor() {
-    this.transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS
-      }
-    });
-  }
+    // Check if email is configured properly
+    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+      console.warn('⚠️  Email credentials not configured. Email notifications will be disabled.');
+      this.transporter = null;
+      return;
+    }
 
+    try {
+      this.transporter = nodemailer.createTransport({
+        service: 'gmail',
+        auth: {
+          user: process.env.EMAIL_USER,
+          pass: process.env.EMAIL_PASS
+        }
+      });
+      console.log('📧 Email service initialized');
+    } catch (error) {
+      console.error('❌ Failed to initialize email service:', error.message);
+      this.transporter = null;
+    }
+  }
   async sendTeamInvitation(email, teamName, invitedByName, invitationToken, role) {
+    // If email service is not configured, log and return
+    if (!this.transporter) {
+      console.log(`📧 Email service not configured - invitation created for ${email} but no email sent`);
+      console.log(`📋 Manual invitation details:`);
+      console.log(`   📧 Email: ${email}`);
+      console.log(`   👥 Team: ${teamName}`);
+      console.log(`   👤 Invited by: ${invitedByName}`);
+      console.log(`   🔑 Token: ${invitationToken}`);
+      console.log(`   🎭 Role: ${role}`);
+      console.log(`   🔗 Invitation URL: ${process.env.FRONTEND_URL}/accept-invitation/${invitationToken}`);
+      return false; // Indicate email was not sent, but don't throw error
+    }
+
     const acceptUrl = `${process.env.FRONTEND_URL}/accept-invitation/${invitationToken}`;
     
     const mailOptions = {
@@ -119,14 +144,22 @@ class EmailService {
         </body>
         </html>
       `
-    };
-
-    try {
+    };    try {
       await this.transporter.sendMail(mailOptions);
-      console.log(`Team invitation email sent to ${email}`);
+      console.log(`✅ Team invitation email sent to ${email}`);
       return true;
     } catch (error) {
-      console.error('Failed to send team invitation email:', error);
+      console.error(`❌ Failed to send team invitation email to ${email}:`, error.message);
+      
+      // Provide specific guidance for common Gmail errors
+      if (error.code === 'EAUTH') {
+        console.log(`💡 Gmail Authentication Fix:`);
+        console.log(`   1. Enable 2-Factor Authentication on your Gmail account`);
+        console.log(`   2. Generate an App Password: https://myaccount.google.com/apppasswords`);
+        console.log(`   3. Update EMAIL_PASS in .env with the App Password (not your regular password)`);
+        console.log(`   4. Or temporarily disable email by removing EMAIL_USER from .env`);
+      }
+      
       throw error;
     }
   }

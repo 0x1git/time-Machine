@@ -179,12 +179,11 @@ const Sidebar = ({ isOpen, onClose }) => {
       { path: '/timer', icon: FiClock, label: 'Timer', show: true },
     ];
 
-    const conditionalItems = [
-      { 
+    const conditionalItems = [      { 
         path: '/projects', 
         icon: FiFolderPlus, 
         label: 'Projects', 
-        show: permissions.canCreateProjects() || permissions.canViewAllProjects() 
+        show: permissions.canCreateProjects() || permissions.canViewAllProjects() || permissions.canEditOwnProjects()
       },
       { 
         path: '/tasks', 

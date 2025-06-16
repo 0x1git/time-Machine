@@ -489,19 +489,22 @@ const Projects = () => {
       toast.error(defaultMessage);
     }
   };
-
   // Project member management functions
   const openMembersModal = async (project) => {
     setSelectedProject(project);
     setShowMembersModal(true);
-    try {
-      const response = await axios.get(`/projects/${project._id}/available-members`);
-      setAvailableMembers(response.data);
-    } catch (error) {
-      toast.error('Failed to load available members');
-      console.error('Error fetching available members:', error);
+    
+    // Only fetch available members if user has edit permissions
+    if (permissions.canEditOwnProjects) {
+      try {
+        const response = await axios.get(`/projects/${project._id}/available-members`);
+        setAvailableMembers(response.data);
+      } catch (error) {
+        toast.error('Failed to load available members');
+        console.error('Error fetching available members:', error);
+      }
     }
-  };  const closeMembersModal = () => {
+  };const closeMembersModal = () => {
     setShowMembersModal(false);
     setSelectedProject(null);
     setMemberForm({ userId: '' });
@@ -568,23 +571,53 @@ const Projects = () => {
             <FiPlus size={20} />
             New Project
           </AddButton>
-        </PermissionGate>
-      </PageHeader>
+        </PermissionGate>      </PageHeader>
 
-      <ProjectsGrid>
-        {projects.map(project => (
-          <ProjectCard key={project._id}>            <ProjectHeader color={project.color}>
-              <ProjectActions>
+      {projects.length === 0 ? (
+        <div style={{ 
+          textAlign: 'center', 
+          padding: '60px 20px',
+          color: '#666',
+          backgroundColor: '#f8f9fa',
+          borderRadius: '8px',
+          border: '2px dashed #ddd'
+        }}>
+          <h3 style={{ marginBottom: '12px', color: '#555' }}>No Projects Found</h3>
+          <p style={{ marginBottom: '20px' }}>
+            You don't have access to any projects yet. 
+            {permissions.canCreateProjects ? ' Create your first project to get started!' : ' Contact your administrator to be added to a project.'}
+          </p>
+          {permissions.canCreateProjects && (
+            <button 
+              onClick={() => openModal()}
+              style={{
+                background: '#3498db',
+                color: 'white',
+                border: 'none',
+                padding: '12px 24px',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontSize: '16px'
+              }}
+            >
+              <FiPlus size={16} style={{ marginRight: '8px' }} />
+              Create Your First Project
+            </button>
+          )}
+        </div>
+      ) : (
+        <ProjectsGrid>
+          {projects.map(project => (
+          <ProjectCard key={project._id}>            <ProjectHeader color={project.color}>              <ProjectActions>
                 <PermissionGate permission="canEditOwnProjects">
                   <ActionButton onClick={() => openModal(project)}>
                     <FiEdit size={16} />
                   </ActionButton>
                 </PermissionGate>
-                <PermissionGate permission="canEditOwnProjects">
-                  <ActionButton onClick={() => openMembersModal(project)}>
-                    <FiUsers size={16} />
-                  </ActionButton>
-                </PermissionGate>
+                {/* All project members can view the members list */}
+                <ActionButton onClick={() => openMembersModal(project)}>
+                  <FiUsers size={16} />
+                </ActionButton>
                 <PermissionGate permission="canDeleteProjects">
                   <ActionButton 
                     className="danger" 
@@ -609,11 +642,11 @@ const Projects = () => {
                   <FiCalendar size={14} />
                   {new Date(project.createdAt).toLocaleDateString()}
                 </MetaItem>
-              </ProjectMeta>
-            </ProjectHeader>
+              </ProjectMeta>            </ProjectHeader>
           </ProjectCard>
         ))}
-      </ProjectsGrid>
+        </ProjectsGrid>
+      )}
 
       {showModal && (
         <Modal onClick={(e) => e.target === e.currentTarget && closeModal()}>
@@ -670,7 +703,9 @@ const Projects = () => {
         <Modal onClick={(e) => e.target === e.currentTarget && closeMembersModal()}>
           <ModalContent>
             <ModalHeader>
-              <ModalTitle>Manage Project Members</ModalTitle>
+              <ModalTitle>
+                {permissions.canEditOwnProjects ? 'Manage Project Members' : 'Project Members'}
+              </ModalTitle>
               <CloseButton onClick={closeMembersModal}>&times;</CloseButton>
             </ModalHeader>
 
@@ -678,7 +713,8 @@ const Projects = () => {
               <h3 style={{ marginBottom: '16px', color: '#2c3e50' }}>Current Members</h3>
               <MembersList>
                 {selectedProject.members?.map((member) => (
-                  <MemberItem key={member._id}>                    <MemberInfo>
+                  <MemberItem key={member._id}>
+                    <MemberInfo>
                       <MemberName>{member.user?.name || 'Unknown'}</MemberName>
                       <MemberEmail>{member.user?.email || 'Unknown'}</MemberEmail>
                       <div style={{ fontSize: '0.75rem', color: '#8b5cf6', fontWeight: '500', marginTop: '4px' }}>
@@ -686,7 +722,8 @@ const Projects = () => {
                       </div>
                     </MemberInfo>
                     <div style={{ display: 'flex', alignItems: 'center' }}>
-                      {selectedProject.owner !== member.user._id && (
+                      {/* Only show remove button if user has edit permissions and member is not the owner */}
+                      {permissions.canEditOwnProjects && selectedProject.owner !== member.user._id && (
                         <RemoveButton onClick={() => removeMember(member.user._id)}>
                           Remove
                         </RemoveButton>
@@ -698,25 +735,46 @@ const Projects = () => {
                   <p style={{ color: '#6b7280', textAlign: 'center', padding: '20px' }}>No members assigned to this project.</p>
                 )}
               </MembersList>
-            </div>            <AddMemberForm onSubmit={addMember}>
-              <MemberSelect
-                value={memberForm.userId}
-                onChange={(e) => setMemberForm({ ...memberForm, userId: e.target.value })}
-                required
-                disabled={availableMembers.length === 0}
-              >
-                <option value="">                  {availableMembers.length === 0 ? 'No available team members' : 'Select a team member to add'}
-                </option>
-                {availableMembers.map((member) => (
-                  <option key={member._id} value={member._id}>
-                    {member.name} ({member.email}) - {member.teamRole}
+            </div>
+
+            {/* Only show add member form if user has edit permissions */}
+            {permissions.canEditOwnProjects && (
+              <AddMemberForm onSubmit={addMember}>
+                <MemberSelect
+                  value={memberForm.userId}
+                  onChange={(e) => setMemberForm({ ...memberForm, userId: e.target.value })}
+                  required
+                  disabled={availableMembers.length === 0}
+                >
+                  <option value="">
+                    {availableMembers.length === 0 ? 'No available team members' : 'Select a team member to add'}
                   </option>
-                ))}
-              </MemberSelect>
-              <Button type="submit" className="primary" disabled={availableMembers.length === 0}>
-                Add Member
-              </Button>
-            </AddMemberForm>
+                  {availableMembers.map((member) => (
+                    <option key={member._id} value={member._id}>
+                      {member.name} ({member.email}) - {member.teamRole}
+                    </option>
+                  ))}
+                </MemberSelect>
+                <Button type="submit" className="primary" disabled={availableMembers.length === 0}>
+                  Add Member
+                </Button>
+              </AddMemberForm>
+            )}
+
+            {/* Show informational message for members without edit permissions */}
+            {!permissions.canEditOwnProjects && (
+              <div style={{ 
+                marginTop: '16px', 
+                padding: '12px', 
+                backgroundColor: '#f8f9fa', 
+                borderRadius: '6px', 
+                border: '1px solid #e9ecef',
+                color: '#6c757d',
+                fontSize: '0.9em'
+              }}>
+                <strong>Note:</strong> You can view project members but don't have permission to add or remove members. Contact your project admin or team manager for member management.
+              </div>
+            )}
           </ModalContent>
         </Modal>
       )}

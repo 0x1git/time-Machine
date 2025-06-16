@@ -34,7 +34,7 @@ router.get('/', [auth, requireOrganization], async (req, res) => {
 
     res.json(projects);
   } catch (error) {
-    console.error(error.message);
+    console.error('Error in GET /projects:', error.message);
     res.status(500).send('Server error');
   }
 });
