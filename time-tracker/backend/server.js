@@ -19,6 +19,67 @@ const app = express();
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// Custom logging middleware to show request details including body
+app.use((req, res, next) => {
+  const method = req.method;
+  const url = req.originalUrl || req.url;
+  
+  // Simple, clean request log
+  console.log(`\n🌐 ${method} ${url}`);
+  
+  // Show authorization status (without token details)
+  if (req.get('authorization')) {
+    console.log(`🔐 Authenticated`);
+  }
+  
+  // Log request body for POST/PUT/PATCH requests
+  if (['POST', 'PUT', 'PATCH'].includes(method) && req.body && Object.keys(req.body).length > 0) {
+    const sanitizedBody = { ...req.body };
+    
+    // Mask sensitive fields
+    if (sanitizedBody.password) sanitizedBody.password = '***';
+    if (sanitizedBody.token) sanitizedBody.token = '***';
+    
+    console.log(`📤 Request Body:`);
+    console.log(JSON.stringify(sanitizedBody, null, 2));
+  }
+  
+  // Log response when it finishes
+  const originalSend = res.send;
+  res.send = function(data) {
+    const statusCode = res.statusCode;
+    
+    if (statusCode >= 400) {
+      console.log(`❌ Error ${statusCode}`);
+      
+      // Show error details
+      if (data) {
+        try {
+          const responseData = typeof data === 'string' ? JSON.parse(data) : data;
+          if (responseData.message) {
+            console.log(`💬 ${responseData.message}`);
+          }
+          if (responseData.details) {
+            console.log(`📝 ${responseData.details}`);
+          }
+        } catch (e) {
+          console.log(`💬 ${data}`);
+        }
+      }
+    } else if (statusCode >= 200 && statusCode < 300) {
+      console.log(`✅ Success ${statusCode}`);
+    } else {
+      console.log(`🔄 ${statusCode}`);
+    }
+    
+    console.log(`─────────────────────────────────────`);
+    return originalSend.call(this, data);
+  };
+  
+  next();
+});
+
 app.use(morgan('short'));
 
 // Database connection
