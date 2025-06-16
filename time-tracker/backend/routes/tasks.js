@@ -103,9 +103,12 @@ router.post('/', [
 // @route   GET /api/tasks/:id
 // @desc    Get task by ID
 // @access  Private
-router.get('/:id', auth, async (req, res) => {
+router.get('/:id', [auth, requireOrganization], async (req, res) => {
   try {
-    const task = await Task.findById(req.params.id)
+    const task = await Task.findOne({
+      _id: req.params.id,
+      organization: req.organizationId
+    })
       .populate('project', 'name color owner members')
       .populate('assignee', 'name email');
 
@@ -131,9 +134,12 @@ router.get('/:id', auth, async (req, res) => {
 // @route   PUT /api/tasks/:id
 // @desc    Update task
 // @access  Private
-router.put('/:id', auth, async (req, res) => {
+router.put('/:id', [auth, requireOrganization], async (req, res) => {
   try {
-    const task = await Task.findById(req.params.id).populate('project');
+    const task = await Task.findOne({ 
+      _id: req.params.id,
+      organization: req.organizationId
+    }).populate('project');
 
     if (!task) {
       return res.status(404).json({ message: 'Task not found' });
@@ -147,15 +153,35 @@ router.put('/:id', auth, async (req, res) => {
       return res.status(403).json({ message: 'Access denied' });
     }
 
-    const { name, description, assignee, status, priority, estimatedHours, dueDate, tags } = req.body;
+    const { name, description, project, assignee, status, priority, estimatedHours, dueDate, tags } = req.body;
+
+    // If project is being changed, check access to new project
+    if (project && project !== task.project._id.toString()) {
+      const newProject = await Project.findOne({
+        _id: project,
+        organization: req.organizationId
+      });
+      
+      if (!newProject) {
+        return res.status(404).json({ message: 'New project not found' });
+      }
+
+      const hasNewProjectAccess = newProject.owner.toString() === req.user.id ||
+                                 newProject.members.some(member => member.user.toString() === req.user.id);
+
+      if (!hasNewProjectAccess) {
+        return res.status(403).json({ message: 'Access denied to new project' });
+      }
+    }
 
     task.name = name || task.name;
-    task.description = description || task.description;
-    task.assignee = assignee || task.assignee;
+    task.description = description !== undefined ? description : task.description;
+    task.project = project || task.project;
+    task.assignee = assignee !== undefined ? assignee : task.assignee;
     task.status = status || task.status;
     task.priority = priority || task.priority;
-    task.estimatedHours = estimatedHours || task.estimatedHours;
-    task.dueDate = dueDate || task.dueDate;
+    task.estimatedHours = estimatedHours !== undefined ? estimatedHours : task.estimatedHours;
+    task.dueDate = dueDate !== undefined ? dueDate : task.dueDate;
     task.tags = tags || task.tags;
 
     await task.save();
@@ -172,9 +198,12 @@ router.put('/:id', auth, async (req, res) => {
 // @route   DELETE /api/tasks/:id
 // @desc    Delete task
 // @access  Private
-router.delete('/:id', auth, async (req, res) => {
+router.delete('/:id', [auth, requireOrganization], async (req, res) => {
   try {
-    const task = await Task.findById(req.params.id).populate('project');
+    const task = await Task.findOne({
+      _id: req.params.id,
+      organization: req.organizationId
+    }).populate('project');
 
     if (!task) {
       return res.status(404).json({ message: 'Task not found' });

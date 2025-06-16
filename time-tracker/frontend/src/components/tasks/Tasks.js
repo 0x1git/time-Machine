@@ -329,6 +329,7 @@ const Tasks = () => {
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [editingTask, setEditingTask] = useState(null);
   const [projects, setProjects] = useState([]);
   const [formData, setFormData] = useState({
     name: '',
@@ -363,8 +364,7 @@ const Tasks = () => {
     } catch (error) {
       console.error('Error fetching projects:', error);
     }
-  };
-  const handleSubmit = async (e) => {
+  };  const handleSubmit = async (e) => {
     e.preventDefault();
     
     if (!formData.projectId) {
@@ -373,25 +373,54 @@ const Tasks = () => {
     }
     
     try {
-      await axios.post('/tasks', {
-        ...formData,
-        project: formData.projectId
-      });
-      toast.success('Task created successfully');
+      if (editingTask && editingTask._id) {
+        await axios.put(`/tasks/${editingTask._id}`, {
+          ...formData,
+          project: formData.projectId
+        });
+        toast.success('Task updated successfully');
+      } else {
+        await axios.post('/tasks', {
+          ...formData,
+          project: formData.projectId
+        });
+        toast.success('Task created successfully');
+      }
       fetchTasks();
       closeModal();
     } catch (error) {
-      toast.error('Failed to create task');
-      console.error('Error creating task:', error);
+      toast.error(editingTask ? 'Failed to update task' : 'Failed to create task');
+      console.error('Error saving task:', error);
     }
   };
 
-  const openModal = () => {
+  const openModal = (task = null) => {
+    if (task) {
+      setEditingTask(task);
+      setFormData({
+        name: task.name,
+        description: task.description || '',
+        priority: task.priority,
+        status: task.status,
+        projectId: task.project?._id || '',
+        dueDate: task.dueDate ? task.dueDate.split('T')[0] : ''
+      });
+    } else {
+      setEditingTask(null);
+      setFormData({
+        name: '',
+        description: '',
+        priority: 'medium',
+        status: 'todo',
+        projectId: '',
+        dueDate: ''
+      });
+    }
     setShowModal(true);
   };
-
   const closeModal = () => {
     setShowModal(false);
+    setEditingTask(null);
     setFormData({
       name: '',
       description: '',
@@ -400,6 +429,19 @@ const Tasks = () => {
       projectId: '',
       dueDate: ''
     });
+  };
+
+  const handleDelete = async (taskId) => {
+    if (window.confirm('Are you sure you want to delete this task?')) {
+      try {
+        await axios.delete(`/tasks/${taskId}`);
+        toast.success('Task deleted successfully');
+        fetchTasks();
+      } catch (error) {
+        toast.error('Failed to delete task');
+        console.error('Error deleting task:', error);
+      }
+    }
   };
 
   const handleFormChange = (field, value) => {
@@ -440,8 +482,7 @@ const Tasks = () => {
   return (
     <TasksContainer>
       <PageHeader>
-        <PageTitle>Tasks</PageTitle>
-        <AddButton onClick={openModal}>
+        <PageTitle>Tasks</PageTitle>        <AddButton onClick={() => openModal(null)}>
           <FiPlus size={20} />
           New Task
         </AddButton>
@@ -462,12 +503,11 @@ const Tasks = () => {
                     {getPriorityLabel(task.priority)}
                   </PriorityBadge>
                 </div>
-              </div>
-              <TaskActions>
-                <ActionButton>
+              </div>              <TaskActions>
+                <ActionButton onClick={() => openModal(task)}>
                   <FiEdit size={16} />
                 </ActionButton>
-                <ActionButton>
+                <ActionButton onClick={() => handleDelete(task._id)}>
                   <FiTrash2 size={16} />
                 </ActionButton>
               </TaskActions>
@@ -508,10 +548,9 @@ const Tasks = () => {
       )}
 
       {showModal && (
-        <Modal>
-          <ModalContent>
+        <Modal>          <ModalContent>
             <ModalHeader>
-              <ModalTitle>Create New Task</ModalTitle>
+              <ModalTitle>{editingTask ? 'Edit Task' : 'Create New Task'}</ModalTitle>
               <CloseButton onClick={closeModal}>&times;</CloseButton>
             </ModalHeader>
 
@@ -586,14 +625,12 @@ const Tasks = () => {
                   value={formData.dueDate}
                   onChange={(e) => handleFormChange('dueDate', e.target.value)}
                 />
-              </FormGroup>
-
-              <ModalActions>
+              </FormGroup>              <ModalActions>
                 <Button type="button" className="secondary" onClick={closeModal}>
                   Cancel
                 </Button>
                 <Button type="submit" className="primary">
-                  Create Task
+                  {editingTask ? 'Update Task' : 'Create Task'}
                 </Button>
               </ModalActions>
             </Form>
