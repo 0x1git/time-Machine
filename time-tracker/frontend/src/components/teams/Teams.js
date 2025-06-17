@@ -561,9 +561,8 @@ const Teams = () => {  const [teams, setTeams] = useState([]);
               <SectionTitle>
                 <FiUsers size={14} style={{ marginRight: 8 }} />
                 Members ({team.members?.length || 0})
-              </SectionTitle>
-              <MembersList>
-                {team.members?.map(member => (
+              </SectionTitle>              <MembersList>
+                {team.members?.filter(member => member.user).map(member => (
                   <MemberItem key={member.user._id}>
                     <MemberInfo>
                       <Avatar>

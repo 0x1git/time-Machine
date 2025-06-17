@@ -13,8 +13,7 @@ const router = express.Router();
 // @desc    Get all teams for user
 // @access  Private
 router.get('/', [auth, requireOrganization], async (req, res) => {
-  try {
-    const teams = await Team.find({
+  try {    const teams = await Team.find({
       $and: [
         { organization: req.organizationId },
         {
@@ -31,7 +30,13 @@ router.get('/', [auth, requireOrganization], async (req, res) => {
     .populate('invitations.invitedBy', 'name email')
     .sort({ createdAt: -1 });
 
-    res.json(teams);
+    // Filter out members with deleted users (null after populate)
+    const cleanedTeams = teams.map(team => ({
+      ...team.toObject(),
+      members: team.members.filter(member => member.user !== null)
+    }));
+
+    res.json(cleanedTeams);
   } catch (error) {
     console.error(error.message);
     res.status(500).send('Server error');
@@ -69,13 +74,17 @@ router.post('/', [
           canManageTasks: true
         }
       }]
-    });
-
-    await team.save();
+    });    await team.save();
     await team.populate('owner', 'name email');
     await team.populate('members.user', 'name email avatar');
 
-    res.json(team);
+    // Filter out members with deleted users (null after populate)
+    const cleanedTeam = {
+      ...team.toObject(),
+      members: team.members.filter(member => member.user !== null)
+    };
+
+    res.json(cleanedTeam);
   } catch (error) {
     console.error(error.message);
     res.status(500).send('Server error');
@@ -227,10 +236,14 @@ router.post('/accept-invitation/:token', auth, async (req, res) => {
     });
 
     // Mark invitation as accepted
-    invitation.status = 'accepted';
-
-    await team.save();
+    invitation.status = 'accepted';    await team.save();
     await team.populate('members.user', 'name email avatar');
+
+    // Filter out members with deleted users (null after populate)
+    const cleanedTeam = {
+      ...team.toObject(),
+      members: team.members.filter(member => member.user !== null)
+    };
 
     // Send welcome email
     try {
@@ -239,7 +252,7 @@ router.post('/accept-invitation/:token', auth, async (req, res) => {
     } catch (emailError) {
       console.error('Failed to send welcome email:', emailError);
       // Continue execution even if email fails
-    }    res.json({ message: 'Successfully joined the team', team });
+    }    res.json({ message: 'Successfully joined the team', team: cleanedTeam });
   } catch (error) {
     console.error(error.message);
     res.status(500).send('Server error');
@@ -290,12 +303,16 @@ router.put('/:id/members/:userId/role', [
     }
 
     // Update role
-    memberToUpdate.role = role;
-
-    await team.save();
+    memberToUpdate.role = role;    await team.save();
     await team.populate('members.user', 'name email avatar');
 
-    res.json(team);
+    // Filter out members with deleted users (null after populate)
+    const cleanedTeam = {
+      ...team.toObject(),
+      members: team.members.filter(member => member.user !== null)
+    };
+
+    res.json(cleanedTeam);
   } catch (error) {
     console.error(error.message);
     res.status(500).send('Server error');
