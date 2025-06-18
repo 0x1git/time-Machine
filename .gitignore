@@ -1,6 +1,6 @@
 
-/time-tracker/backend/.env
-/time-tracker/frontend/.env
+
+
 # Ignore root-level node_modules
 /node_modules
 
@@ -9,3 +9,6 @@
 
 # Ignore backend node_modules
 /time-tracker/backend/node_modules
+# Ignore environment files
+/time-tracker/frontend/.env
+/time-tracker/backend/.env
