@@ -5,6 +5,7 @@ import { FiPlus, FiEdit, FiTrash2, FiUser, FiCalendar, FiFlag } from 'react-icon
 import axios from 'axios';
 import { toast } from 'react-toastify';
 import { useAuth } from '../../contexts/AuthContext';
+import { useNotifications } from '../../contexts/NotificationContext';
 
 const TasksContainer = styled.div`
   max-width: 1200px;
@@ -327,24 +328,96 @@ const Button = styled.button`
   }
 `;
 
+const MultiSelectContainer = styled.div`
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: white;
+  min-height: 40px;
+  padding: 8px;
+  cursor: pointer;
+  
+  &:focus-within {
+    border-color: #3498db;
+    box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+  }
+`;
+
+const SelectedMembers = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 8px;
+`;
+
+const MemberTag = styled.span`
+  background: #e1f5fe;
+  color: #0277bd;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+`;
+
+const RemoveTag = styled.button`
+  background: none;
+  border: none;
+  color: #0277bd;
+  cursor: pointer;
+  padding: 0;
+  font-size: 14px;
+  
+  &:hover {
+    color: #01579b;
+  }
+`;
+
+const MemberDropdown = styled.div`
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  background: white;
+  position: absolute;
+  width: 100%;
+  z-index: 1000;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+`;
+
+const MemberOption = styled.div`
+  padding: 8px 12px;
+  cursor: pointer;
+  border-bottom: 1px solid #f3f4f6;
+  
+  &:hover {
+    background: #f8f9fa;
+  }
+  
+  &:last-child {
+    border-bottom: none;
+  }
+`;
+
 const Tasks = () => {
   const { currentUser } = useAuth();
+  const { refreshAssignedTasks } = useNotifications();
   const [searchParams, setSearchParams] = useSearchParams();
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
-  const [editingTask, setEditingTask] = useState(null);  const [projects, setProjects] = useState([]);
-  const [teamMembers, setTeamMembers] = useState([]);
+  const [editingTask, setEditingTask] = useState(null);  const [projects, setProjects] = useState([]);  const [teamMembers, setTeamMembers] = useState([]);
   const [canAssignTasks, setCanAssignTasks] = useState(false);
+  const [showAssigneeDropdown, setShowAssigneeDropdown] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     description: '',
     priority: 'medium',
     status: 'todo',
     projectId: '',
-    assignee: '',
+    assignees: [],
     dueDate: ''
-  });  useEffect(() => {
+  });useEffect(() => {
     fetchTasks();
     fetchProjects();
     fetchTeamMembers();
@@ -362,10 +435,9 @@ const Tasks = () => {
       if (assigneeName) {
         toast.info(`Creating a new task for ${assigneeName}`);
       }
-      
-      // Wait a bit for data to load before opening modal
+        // Wait a bit for data to load before opening modal
       setTimeout(() => {
-        setFormData(prev => ({ ...prev, assignee: assigneeId }));
+        setFormData(prev => ({ ...prev, assignees: [assigneeId] }));
         setShowModal(true);
         // Clear URL parameters
         setSearchParams({});
@@ -504,17 +576,23 @@ const Tasks = () => {
       const taskData = {
         ...formData,
         project: formData.projectId,
-        assignee: formData.assignee || null
+        assignees: formData.assignees || []
       };
       
       if (editingTask && editingTask._id) {
         await axios.put(`/tasks/${editingTask._id}`, taskData);
         toast.success('Task updated successfully');
+        if (taskData.assignees.length > 0) {
+          toast.info(`Task assigned to ${taskData.assignees.length} user(s)`);
+        }
       } else {
         await axios.post('/tasks', taskData);
         toast.success('Task created successfully');
-      }
+        if (taskData.assignees.length > 0) {
+          toast.info(`Task assigned to ${taskData.assignees.length} user(s)`);
+        }      }
       fetchTasks();
+      refreshAssignedTasks(); // Refresh notification count
       closeModal();
     } catch (error) {
       handleApiError(error, editingTask ? 'Failed to update task' : 'Failed to create task');
@@ -538,15 +616,14 @@ const Tasks = () => {
         }
       );
       return;
-    }    if (task) {
-      setEditingTask(task);
+    }    if (task) {      setEditingTask(task);
       setFormData({
         name: task.name,
         description: task.description || '',
         priority: task.priority,
         status: task.status,
         projectId: task.project?._id || '',
-        assignee: task.assignee?._id || '',
+        assignees: task.assignees ? task.assignees.map(a => a._id) : [],
         dueDate: task.dueDate ? task.dueDate.split('T')[0] : ''
       });
     } else {
@@ -557,21 +634,20 @@ const Tasks = () => {
         priority: 'medium',
         status: 'todo',
         projectId: '',
-        assignee: '',
+        assignees: [],
         dueDate: ''
       });
     }
     setShowModal(true);
   };  const closeModal = () => {
     setShowModal(false);
-    setEditingTask(null);
-    setFormData({
+    setEditingTask(null);    setFormData({
       name: '',
       description: '',
       priority: 'medium',
       status: 'todo',
       projectId: '',
-      assignee: '',
+      assignees: [],
       dueDate: ''
     });
   };
@@ -593,6 +669,35 @@ const Tasks = () => {
       ...prev,
       [field]: value
     }));
+  };
+
+  const handleAddAssignee = (memberId) => {
+    if (!formData.assignees.includes(memberId)) {
+      setFormData(prev => ({
+        ...prev,
+        assignees: [...prev.assignees, memberId]
+      }));
+    }
+    setShowAssigneeDropdown(false);
+  };
+
+  const handleRemoveAssignee = (memberId) => {
+    setFormData(prev => ({
+      ...prev,
+      assignees: prev.assignees.filter(id => id !== memberId)
+    }));
+  };
+
+  const getSelectedMembers = () => {
+    return formData.assignees.map(id => 
+      teamMembers.find(member => member._id === id)
+    ).filter(Boolean);
+  };
+
+  const getAvailableMembers = () => {
+    return teamMembers.filter(member => 
+      !formData.assignees.includes(member._id)
+    );
   };
 
   const getStatusLabel = (status) => {
@@ -667,13 +772,11 @@ const Tasks = () => {
 
             {task.description && (
               <TaskDescription>{task.description}</TaskDescription>
-            )}
-
-            <TaskMeta>
-              {task.assignee && (
+            )}            <TaskMeta>
+              {task.assignees && task.assignees.length > 0 && (
                 <MetaItem>
                   <FiUser size={14} />
-                  {task.assignee.name}
+                  {task.assignees.map(assignee => assignee.name).join(', ')}
                 </MetaItem>
               )}
               {task.dueDate && (
@@ -792,23 +895,55 @@ const Tasks = () => {
                       {project.name}
                     </option>
                   ))}
-                </Select>              </FormGroup>
-
-              {canAssignTasks && (
-                <FormGroup>
-                  <Label htmlFor="task-assignee">Assignee</Label>
-                  <Select
-                    id="task-assignee"
-                    value={formData.assignee}
-                    onChange={(e) => handleFormChange('assignee', e.target.value)}
+                </Select>              </FormGroup>              {canAssignTasks && (
+                <FormGroup style={{ position: 'relative' }}>
+                  <Label htmlFor="task-assignees">Assignees</Label>
+                  <MultiSelectContainer
+                    id="task-assignees"
+                    onClick={() => setShowAssigneeDropdown(!showAssigneeDropdown)}
                   >
-                    <option value="">Select a team member</option>
-                    {teamMembers.map(member => (
-                      <option key={member._id} value={member._id}>
-                        {member.name} ({member.email})
-                      </option>
-                    ))}
-                  </Select>
+                    <SelectedMembers>
+                      {getSelectedMembers().length === 0 && (
+                        <span style={{ color: '#9ca3af', fontStyle: 'italic' }}>
+                          Click to select team members
+                        </span>
+                      )}
+                      {getSelectedMembers().map(member => (
+                        <MemberTag key={member._id}>
+                          {member.name}
+                          <RemoveTag 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRemoveAssignee(member._id);
+                            }}
+                          >
+                            ×
+                          </RemoveTag>
+                        </MemberTag>
+                      ))}
+                    </SelectedMembers>
+
+                    {showAssigneeDropdown && (
+                      <MemberDropdown>
+                        {getAvailableMembers().length === 0 ? (
+                          <MemberOption style={{ color: '#9ca3af', fontStyle: 'italic' }}>
+                            All team members are assigned
+                          </MemberOption>
+                        ) : (
+                          getAvailableMembers().map(member => (
+                            <MemberOption 
+                              key={member._id} 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleAddAssignee(member._id);
+                              }}
+                            >
+                              {member.name} ({member.email})                            </MemberOption>
+                          ))
+                        )}
+                      </MemberDropdown>
+                    )}
+                  </MultiSelectContainer>
                 </FormGroup>
               )}
 

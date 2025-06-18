@@ -13,8 +13,10 @@ import {
   LineElement
 } from 'chart.js';
 import { Bar, Doughnut, Line } from 'react-chartjs-2';
-import { FiClock, FiFolderPlus, FiTrendingUp, FiCalendar } from 'react-icons/fi';
+import { FiClock, FiFolderPlus, FiTrendingUp, FiCalendar, FiClipboard } from 'react-icons/fi';
 import axios from 'axios';
+import { useAuth } from '../../contexts/AuthContext';
+import { useNotifications } from '../../contexts/NotificationContext';
 
 ChartJS.register(
   CategoryScale,
@@ -181,24 +183,143 @@ const ActivityMeta = styled.div`
   color: #6b7280;
 `;
 
+const TaskList = styled.div`
+  max-height: 400px;
+  overflow-y: auto;
+`;
+
+const TaskItem = styled.div`
+  padding: 16px;
+  border: 1px solid #e1e5e9;
+  border-radius: 8px;
+  margin-bottom: 12px;
+  background: #f8f9fa;
+  transition: all 0.2s ease;
+
+  &:hover {
+    background: #f1f3f4;
+    border-color: #d1d5db;
+  }
+
+  &:last-child {
+    margin-bottom: 0;
+  }
+`;
+
+const TaskHeader = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 8px;
+`;
+
+const TaskTitle = styled.h4`
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #2c3e50;
+  margin: 0;
+  line-height: 1.4;
+`;
+
+const TaskStatus = styled.span`
+  font-size: 0.75rem;
+  font-weight: 500;
+  padding: 4px 8px;
+  border-radius: 12px;
+  text-transform: capitalize;
+  white-space: nowrap;
+  background: ${props => {
+    switch (props.status) {
+      case 'pending': return '#fef3c7';
+      case 'in-progress': return '#dbeafe';
+      case 'completed': return '#d1fae5';
+      default: return '#f3f4f6';
+    }
+  }};
+  color: ${props => {
+    switch (props.status) {
+      case 'pending': return '#92400e';
+      case 'in-progress': return '#1e40af';
+      case 'completed': return '#065f46';
+      default: return '#374151';
+    }
+  }};
+`;
+
+const TaskMeta = styled.div`
+  font-size: 0.8rem;
+  color: #6b7280;
+  margin-bottom: 8px;
+`;
+
+const TaskDescription = styled.p`
+  font-size: 0.85rem;
+  color: #4b5563;
+  margin: 0;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+`;
+
+const ViewAllTasks = styled.div`
+  padding: 12px 16px;
+  text-align: center;
+  color: #3498db;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+
+  &:hover {
+    background: #f8fafc;
+    border-color: #3498db;
+  }
+`;
+
+const NoTasks = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  text-align: center;
+  color: #6b7280;
+
+  p {
+    margin: 12px 0 0 0;
+    font-size: 0.9rem;
+  }
+`;
+
 const Dashboard = () => {
+  const { currentUser } = useAuth();
+  const { assignedTasks, assignedTasksCount } = useNotifications();
   const [dashboardData, setDashboardData] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetchDashboardData();
-  }, []);
-
-  const fetchDashboardData = async () => {
+  const [loading, setLoading] = useState(true);  useEffect(() => {
+    if (currentUser) {
+      fetchDashboardData();
+    }
+  }, [currentUser, assignedTasks]);const fetchDashboardData = async () => {
     try {
-      const [dashboardResponse, dailyActivityResponse] = await Promise.all([
-        axios.get('/reports/dashboard'),
-        axios.get('/reports/daily-activity?days=7')
+      const token = localStorage.getItem('token');
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      
+      console.log('Fetching dashboard data for user:', currentUser?._id);
+        const [dashboardResponse, dailyActivityResponse] = await Promise.all([
+        axios.get('/reports/dashboard', { headers }),
+        axios.get('/reports/daily-activity?days=7', { headers })
       ]);
+
+      console.log('Assigned tasks from context:', assignedTasks);
 
       setDashboardData({
         ...dashboardResponse.data,
-        dailyActivity: dailyActivityResponse.data
+        dailyActivity: dailyActivityResponse.data,
+        assignedTasks: assignedTasks
       });
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
@@ -303,9 +424,7 @@ const Dashboard = () => {
               <StatLabel>This Month</StatLabel>
             </StatContent>
           </StatHeader>
-        </StatCard>
-
-        <StatCard color="#f39c12">
+        </StatCard>        <StatCard color="#f39c12">
           <StatHeader>
             <StatIcon color="#f39c12">
               <FiFolderPlus size={24} />
@@ -316,12 +435,57 @@ const Dashboard = () => {
             </StatContent>
           </StatHeader>
         </StatCard>
-      </StatsGrid>
 
-      <ChartsGrid>
+        <StatCard color="#e74c3c">
+          <StatHeader>
+            <StatIcon color="#e74c3c">
+              <FiClipboard size={24} />
+            </StatIcon>
+            <StatContent>
+              <StatValue>{dashboardData?.assignedTasks?.length || 0}</StatValue>
+              <StatLabel>Assigned Tasks</StatLabel>
+            </StatContent>
+          </StatHeader>
+        </StatCard>
+      </StatsGrid>      <ChartsGrid>
         <ChartCard>
           <ChartTitle>Daily Activity (Last 7 Days)</ChartTitle>
           <Bar data={dailyActivityData} options={chartOptions} />
+        </ChartCard>
+        
+        <ChartCard>
+          <ChartTitle>My Assigned Tasks</ChartTitle>
+          {dashboardData?.assignedTasks?.length > 0 ? (
+            <TaskList>
+              {dashboardData.assignedTasks.slice(0, 5).map((task) => (
+                <TaskItem key={task._id}>
+                  <TaskHeader>
+                    <TaskTitle>{task.title}</TaskTitle>
+                    <TaskStatus status={task.status}>{task.status}</TaskStatus>
+                  </TaskHeader>
+                  <TaskMeta>
+                    Project: {task.project?.name || 'No project'}
+                    {task.dueDate && (
+                      <span> • Due: {formatDate(task.dueDate)}</span>
+                    )}
+                  </TaskMeta>
+                  {task.description && (
+                    <TaskDescription>{task.description}</TaskDescription>
+                  )}
+                </TaskItem>
+              ))}
+              {dashboardData.assignedTasks.length > 5 && (
+                <ViewAllTasks>
+                  View all {dashboardData.assignedTasks.length} assigned tasks
+                </ViewAllTasks>
+              )}
+            </TaskList>
+          ) : (
+            <NoTasks>
+              <FiClipboard size={48} color="#cbd5e1" />
+              <p>No tasks assigned to you</p>
+            </NoTasks>
+          )}
         </ChartCard>
       </ChartsGrid>
 

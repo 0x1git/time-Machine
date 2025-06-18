@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { useAuth } from '../../contexts/AuthContext';
-import { FiMenu, FiClock, FiPlay, FiPause } from 'react-icons/fi';
+import { useNotifications } from '../../contexts/NotificationContext';
+import { FiMenu, FiClock, FiPlay, FiPause, FiBell } from 'react-icons/fi';
 import axios from 'axios';
 
 const HeaderContainer = styled.header`
@@ -87,12 +88,42 @@ const UserAvatar = styled.div`
   font-size: 16px;
 `;
 
+const NotificationBell = styled.div`
+  position: relative;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 50%;
+  background: ${props => props.hasNotifications ? '#fef3c7' : 'transparent'};
+  color: ${props => props.hasNotifications ? '#d97706' : '#6b7280'};
+  transition: all 0.2s ease;
+
+  &:hover {
+    background: #f3f4f6;
+    color: #374151;
+  }
+`;
+
+const NotificationBadge = styled.div`
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  background: #ef4444;
+  color: white;
+  border-radius: 50%;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: bold;
+`;
+
 const Header = ({ onToggleSidebar }) => {
   const { currentUser } = useAuth();
+  const { assignedTasksCount } = useNotifications();
   const [runningTimer, setRunningTimer] = useState(null);
-  const [elapsedTime, setElapsedTime] = useState(0);
-
-  useEffect(() => {
+  const [elapsedTime, setElapsedTime] = useState(0);  useEffect(() => {
     fetchRunningTimer();
     const interval = setInterval(() => {
       if (runningTimer) {
@@ -155,9 +186,7 @@ const Header = ({ onToggleSidebar }) => {
         <MenuButton onClick={onToggleSidebar}>
           <FiMenu size={20} />
         </MenuButton>
-      </LeftSection>
-
-      <RightSection>
+      </LeftSection>      <RightSection>
         {runningTimer && (
           <TimerDisplay isRunning={true}>
             <FiClock />
@@ -167,6 +196,15 @@ const Header = ({ onToggleSidebar }) => {
             </TimerButton>
           </TimerDisplay>
         )}
+        
+        <NotificationBell hasNotifications={assignedTasksCount > 0}>
+          <FiBell size={20} />
+          {assignedTasksCount > 0 && (
+            <NotificationBadge>
+              {assignedTasksCount > 99 ? '99+' : assignedTasksCount}
+            </NotificationBadge>
+          )}
+        </NotificationBell>
         
         <UserAvatar>
           {currentUser?.avatar ? (

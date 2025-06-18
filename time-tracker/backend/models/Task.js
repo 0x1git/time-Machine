@@ -14,16 +14,15 @@ const taskSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Organization',
     required: true
-  },
-  project: {
+  },  project: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Project',
     required: true
   },
-  assignee: {
+  assignees: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
-  },
+  }],
   status: {
     type: String,
     enum: ['todo', 'in-progress', 'completed', 'on-hold'],
@@ -60,6 +59,6 @@ const taskSchema = new mongoose.Schema({
 
 // Index for faster queries
 taskSchema.index({ project: 1, status: 1 });
-taskSchema.index({ assignee: 1, status: 1 });
+taskSchema.index({ assignees: 1, status: 1 });
 
 module.exports = mongoose.model('Task', taskSchema);

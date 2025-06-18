@@ -5,6 +5,7 @@ import 'react-toastify/dist/ReactToastify.css';
 
 import { AuthProvider } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
+import { NotificationProvider } from './contexts/NotificationContext';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 import Login from './components/auth/Login';
 import Register from './components/auth/Register';
@@ -31,12 +32,12 @@ const ProtectedRouteWrapper = ({ children }) => {
   );
 };
 
-function App() {
-  return (
+function App() {  return (
     <ThemeProvider>
       <AuthProvider>
-        <GlobalStyles />
-        <Router>
+        <NotificationProvider>
+          <GlobalStyles />
+          <Router>
           <div className="App">
             <Routes>              {/* Public Routes */}
               <Route path="/login" element={<Login />} />
@@ -91,9 +92,9 @@ function App() {
               pauseOnFocusLoss
               draggable
               pauseOnHover
-            />
-          </div>
+            />          </div>
         </Router>
+        </NotificationProvider>
       </AuthProvider>
     </ThemeProvider>
   );

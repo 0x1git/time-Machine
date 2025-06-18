@@ -64,14 +64,13 @@ router.get('/', [auth, requireOrganization], async (req, res) => {
       project: { $in: projectIds }, 
       isActive: true 
     };
-    
-    if (project) query.project = project;
+      if (project) query.project = project;
     if (status) query.status = status;
-    if (assignee) query.assignee = assignee;
+    if (assignee) query.assignees = assignee;
 
     const tasks = await Task.find(query)
       .populate('project', 'name color')
-      .populate('assignee', 'name email')
+      .populate('assignees', 'name email')
       .sort({ createdAt: -1 });
 
     res.json(tasks);
@@ -96,7 +95,7 @@ router.post('/', [
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { name, description, project, assignee, priority, estimatedHours, dueDate, tags } = req.body;    // Check if user has access to project within their organization
+    const { name, description, project, assignees, priority, estimatedHours, dueDate, tags } = req.body;    // Check if user has access to project within their organization
     const projectDoc = await Project.findOne({
       _id: project,
       organization: req.organizationId
@@ -132,27 +131,26 @@ router.post('/', [
         },        action: 'To create tasks in this project, you need to be added as a project member. Please contact the project owner or your administrator.',
         solution: `Ask ${ownerName} (project owner) to add you to the project through the project management interface.`
       });
-    }
-
-    // Check if user is trying to assign task to someone else
-    if (assignee && assignee !== req.user.id) {
-      const canAssign = await canAssignTasks(req.user.id, req.organizationId);
-      if (!canAssign) {
-        return res.status(403).json({
-          message: 'Permission denied',
-          details: 'Only team admins and managers can assign tasks to other team members.',
-          action: 'You can create tasks for yourself, or ask a team admin/manager to assign tasks to others.',
-          solution: 'Contact your team admin or manager to get the necessary permissions.'
-        });
+    }    // Check if user is trying to assign task to someone else
+    if (assignees && assignees.length > 0) {
+      const hasOthers = assignees.some(assigneeId => assigneeId !== req.user.id);
+      if (hasOthers) {
+        const canAssign = await canAssignTasks(req.user.id, req.organizationId);
+        if (!canAssign) {
+          return res.status(403).json({
+            message: 'Permission denied',
+            details: 'Only team admins and managers can assign tasks to other team members.',
+            action: 'You can create tasks for yourself, or ask a team admin/manager to assign tasks to others.',
+            solution: 'Contact your team admin or manager to get the necessary permissions.'
+          });
+        }
       }
-    }
-
-    const task = new Task({
+    }    const task = new Task({
       name,
       description,
       organization: req.organizationId,
       project,
-      assignee,
+      assignees: assignees || [],
       priority,
       estimatedHours,
       dueDate,
@@ -161,7 +159,7 @@ router.post('/', [
 
     await task.save();
     await task.populate('project', 'name color');
-    await task.populate('assignee', 'name email');
+    await task.populate('assignees', 'name email');
 
     res.status(201).json(task);
   } catch (error) {
@@ -178,9 +176,8 @@ router.get('/:id', [auth, requireOrganization], async (req, res) => {
     const task = await Task.findOne({
       _id: req.params.id,
       organization: req.organizationId
-    })
-      .populate('project', 'name color owner members')
-      .populate('assignee', 'name email');
+    })      .populate('project', 'name color owner members')
+      .populate('assignees', 'name email');
 
     if (!task) {
       return res.status(404).json({ message: 'Task not found' });
@@ -241,7 +238,7 @@ router.put('/:id', [auth, requireOrganization], async (req, res) => {
       });
     }
 
-    const { name, description, project, assignee, status, priority, estimatedHours, dueDate, tags } = req.body;
+    const { name, description, project, assignees, status, priority, estimatedHours, dueDate, tags } = req.body;
 
     // If project is being changed, check access to new project
     if (project && project !== task.project._id.toString()) {
@@ -258,25 +255,30 @@ router.put('/:id', [auth, requireOrganization], async (req, res) => {
                                  newProject.members.some(member => member.user.toString() === req.user.id);      if (!hasNewProjectAccess) {
         return res.status(403).json({ message: 'Access denied to new project' });
       }
-    }
-
-    // Check if user is trying to change task assignment to someone else
-    if (assignee !== undefined && assignee !== task.assignee && assignee !== req.user.id) {
-      const canAssign = await canAssignTasks(req.user.id, req.organizationId);
-      if (!canAssign) {
-        return res.status(403).json({
-          message: 'Permission denied',
-          details: 'Only team admins and managers can assign tasks to other team members.',
-          action: 'You can assign tasks to yourself, or ask a team admin/manager to assign tasks to others.',
-          solution: 'Contact your team admin or manager to get the necessary permissions.'
-        });
+    }    // Check if user is trying to change task assignment to someone else
+    if (assignees !== undefined) {
+      const currentAssigneeIds = task.assignees.map(id => id.toString());
+      const newAssigneeIds = assignees.map(id => id.toString());
+      
+      // Check if adding new assignees that aren't the current user
+      const addedAssignees = newAssigneeIds.filter(id => !currentAssigneeIds.includes(id));
+      const hasOthers = addedAssignees.some(assigneeId => assigneeId !== req.user.id);
+      
+      if (hasOthers) {
+        const canAssign = await canAssignTasks(req.user.id, req.organizationId);
+        if (!canAssign) {
+          return res.status(403).json({
+            message: 'Permission denied',
+            details: 'Only team admins and managers can assign tasks to other team members.',
+            action: 'You can assign tasks to yourself, or ask a team admin/manager to assign tasks to others.',
+            solution: 'Contact your team admin or manager to get the necessary permissions.'
+          });
+        }
       }
-    }
-
-    task.name = name || task.name;
+    }    task.name = name || task.name;
     task.description = description !== undefined ? description : task.description;
     task.project = project || task.project;
-    task.assignee = assignee !== undefined ? assignee : task.assignee;
+    task.assignees = assignees !== undefined ? assignees : task.assignees;
     task.status = status || task.status;
     task.priority = priority || task.priority;
     task.estimatedHours = estimatedHours !== undefined ? estimatedHours : task.estimatedHours;
@@ -285,7 +287,7 @@ router.put('/:id', [auth, requireOrganization], async (req, res) => {
 
     await task.save();
     await task.populate('project', 'name color');
-    await task.populate('assignee', 'name email');
+    await task.populate('assignees', 'name email');
 
     res.json(task);
   } catch (error) {
