@@ -60,9 +60,15 @@ Create a `.env` file in the backend directory:
 ```env
 PORT=5000
 MONGODB_URI=mongodb://localhost:27017/timetracker
-JWT_SECRET=your_super_secure_jwt_secret_key_here
+JWT_SECRET=super_secure_jwt_secret_key_for_time_tracker_2025
 JWT_EXPIRE=7d
 NODE_ENV=development
+
+# Email Configuration 
+EMAIL_USER=your@gmail.com
+EMAIL_PASS=your pass
+FRONTEND_URL=http://localhost:3000
+
 ```
 
 ### 3. Frontend Setup
