@@ -2,10 +2,42 @@ const express = require('express');
 const { body, validationResult } = require('express-validator');
 const Task = require('../models/Task');
 const Project = require('../models/Project');
+const Team = require('../models/Team');
 const { auth } = require('../middleware/auth');
 const { requireOrganization } = require('../middleware/organization');
 
 const router = express.Router();
+
+// Helper function to check if user can assign tasks
+const canAssignTasks = async (userId, organizationId) => {
+  try {
+    // Find teams where the user is a member within the organization
+    const teams = await Team.find({
+      organization: organizationId,
+      'members.user': userId,
+      isActive: true
+    });
+
+    // Check if user has admin or manager role in any team, or has canManageTeam permission
+    for (const team of teams) {
+      const userMember = team.members.find(m => m.user.toString() === userId.toString());
+      if (userMember) {
+        // Admin or manager can assign tasks
+        if (userMember.role === 'admin' || userMember.role === 'manager') {
+          return true;
+        }
+        // Or if they have explicit canManageTeam permission
+        if (userMember.permissions && userMember.permissions.canManageTeam) {
+          return true;
+        }
+      }
+    }
+    return false;
+  } catch (error) {
+    console.error('Error checking task assignment permissions:', error);
+    return false;
+  }
+};
 
 // @route   GET /api/tasks
 // @desc    Get tasks for user within organization
@@ -97,11 +129,25 @@ router.post('/', [
           name: projectDoc.name,
           owner: ownerName,
           members: memberNames || 'No other members'
-        },
-        action: 'To create tasks in this project, you need to be added as a project member. Please contact the project owner or your administrator.',
+        },        action: 'To create tasks in this project, you need to be added as a project member. Please contact the project owner or your administrator.',
         solution: `Ask ${ownerName} (project owner) to add you to the project through the project management interface.`
       });
-    }const task = new Task({
+    }
+
+    // Check if user is trying to assign task to someone else
+    if (assignee && assignee !== req.user.id) {
+      const canAssign = await canAssignTasks(req.user.id, req.organizationId);
+      if (!canAssign) {
+        return res.status(403).json({
+          message: 'Permission denied',
+          details: 'Only team admins and managers can assign tasks to other team members.',
+          action: 'You can create tasks for yourself, or ask a team admin/manager to assign tasks to others.',
+          solution: 'Contact your team admin or manager to get the necessary permissions.'
+        });
+      }
+    }
+
+    const task = new Task({
       name,
       description,
       organization: req.organizationId,
@@ -209,10 +255,21 @@ router.put('/:id', [auth, requireOrganization], async (req, res) => {
       }
 
       const hasNewProjectAccess = newProject.owner.toString() === req.user.id ||
-                                 newProject.members.some(member => member.user.toString() === req.user.id);
-
-      if (!hasNewProjectAccess) {
+                                 newProject.members.some(member => member.user.toString() === req.user.id);      if (!hasNewProjectAccess) {
         return res.status(403).json({ message: 'Access denied to new project' });
+      }
+    }
+
+    // Check if user is trying to change task assignment to someone else
+    if (assignee !== undefined && assignee !== task.assignee && assignee !== req.user.id) {
+      const canAssign = await canAssignTasks(req.user.id, req.organizationId);
+      if (!canAssign) {
+        return res.status(403).json({
+          message: 'Permission denied',
+          details: 'Only team admins and managers can assign tasks to other team members.',
+          action: 'You can assign tasks to yourself, or ask a team admin/manager to assign tasks to others.',
+          solution: 'Contact your team admin or manager to get the necessary permissions.'
+        });
       }
     }
 

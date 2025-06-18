@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
-import { FiPlus, FiUsers, FiMail, FiEdit, FiTrash2, FiUserPlus, FiX } from 'react-icons/fi';
+import { FiPlus, FiUsers, FiMail, FiEdit, FiTrash2, FiUserPlus, FiX, FiClipboard } from 'react-icons/fi';
 import axios from 'axios';
 import { toast } from 'react-toastify';
 import { useAuth } from '../../contexts/AuthContext';
@@ -234,6 +235,29 @@ const RemoveButton = styled.button`
   }
 `;
 
+const AssignTaskButton = styled.button`
+  background: transparent;
+  border: none;
+  color: #3b82f6;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+
+  &:hover {
+    background: #eff6ff;
+    color: #2563eb;
+  }
+
+  &:disabled {
+    color: #d1d5db;
+    cursor: not-allowed;
+  }
+`;
+
 const Modal = styled.div`
   position: fixed;
   top: 0;
@@ -411,13 +435,14 @@ const InvitationRole = styled.span`
 
 const Teams = () => {
   const { currentUser } = useAuth();
+  const navigate = useNavigate();
   const [teams, setTeams] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
-  const [showInviteModal, setShowInviteModal] = useState(false);
-  const [selectedTeam, setSelectedTeam] = useState(null);
+  const [showInviteModal, setShowInviteModal] = useState(false);  const [selectedTeam, setSelectedTeam] = useState(null);
   const [invitations, setInvitations] = useState([]);
+  const [canAssignTasks, setCanAssignTasks] = useState(false);
 
   const [teamForm, setTeamForm] = useState({
     name: '',
@@ -457,8 +482,9 @@ const Teams = () => {
     }
     
     return false;
-  };useEffect(() => {
+  };  useEffect(() => {
     fetchTeams();
+    checkAssignPermissions();
   }, []);
 
   const fetchTeams = async () => {
@@ -540,6 +566,12 @@ const Teams = () => {
     }
   };
 
+  const handleAssignTask = (member) => {
+    // Navigate to tasks page with assignee pre-selected
+    navigate(`/tasks?assignee=${member._id}&assigneeName=${encodeURIComponent(member.name)}&action=create`);
+    toast.info(`Redirecting to create a task for ${member.name}...`);
+  };
+
   const openInviteModal = (team) => {
     setSelectedTeam(team);
     setShowInviteModal(true);
@@ -589,6 +621,24 @@ const Teams = () => {
       .join('')
       .toUpperCase()
       .slice(0, 2);
+  };
+
+  const checkAssignPermissions = async () => {
+    try {
+      const response = await axios.get('/teams');
+      // Check if user is admin or manager in any team
+      let hasPermission = false;
+      response.data.forEach(team => {
+        const userMember = team.members.find(m => m.user._id === currentUser?._id);
+        if (userMember && (userMember.role === 'admin' || userMember.role === 'manager' || userMember.permissions?.canManageTeam)) {
+          hasPermission = true;
+        }
+      });
+      setCanAssignTasks(hasPermission);
+    } catch (error) {
+      console.error('Error checking assign permissions:', error);
+      setCanAssignTasks(false);
+    }
   };
 
   if (loading) {
@@ -651,6 +701,14 @@ const Teams = () => {
                       <RoleBadge className={member.role}>
                         {member.role}
                       </RoleBadge>
+                      {canAssignTasks && (
+                        <AssignTaskButton
+                          onClick={() => handleAssignTask(member.user)}
+                          title={`Assign task to ${member.user.name}`}
+                        >
+                          <FiClipboard size={14} />
+                        </AssignTaskButton>
+                      )}
                       {canRemoveMember(team, member) && (
                         <RemoveButton
                           onClick={() => handleRemoveMember(team._id, member.user._id, member.user.name)}

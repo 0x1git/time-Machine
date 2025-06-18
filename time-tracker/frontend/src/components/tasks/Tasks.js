@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import styled from 'styled-components';
 import { FiPlus, FiEdit, FiTrash2, FiUser, FiCalendar, FiFlag } from 'react-icons/fi';
 import axios from 'axios';
 import { toast } from 'react-toastify';
+import { useAuth } from '../../contexts/AuthContext';
 
 const TasksContainer = styled.div`
   max-width: 1200px;
@@ -326,24 +328,50 @@ const Button = styled.button`
 `;
 
 const Tasks = () => {
+  const { currentUser } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
-  const [editingTask, setEditingTask] = useState(null);
-  const [projects, setProjects] = useState([]);
+  const [editingTask, setEditingTask] = useState(null);  const [projects, setProjects] = useState([]);
+  const [teamMembers, setTeamMembers] = useState([]);
+  const [canAssignTasks, setCanAssignTasks] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     description: '',
     priority: 'medium',
     status: 'todo',
     projectId: '',
+    assignee: '',
     dueDate: ''
-  });
-
-  useEffect(() => {
+  });  useEffect(() => {
     fetchTasks();
     fetchProjects();
+    fetchTeamMembers();
+    checkAssignPermissions();
   }, []);
+
+  // Handle URL parameters for task assignment from teams page
+  useEffect(() => {
+    const assigneeId = searchParams.get('assignee');
+    const assigneeName = searchParams.get('assigneeName');
+    const action = searchParams.get('action');
+    
+    if (assigneeId && action === 'create') {
+      // Show notification about pre-filled assignee
+      if (assigneeName) {
+        toast.info(`Creating a new task for ${assigneeName}`);
+      }
+      
+      // Wait a bit for data to load before opening modal
+      setTimeout(() => {
+        setFormData(prev => ({ ...prev, assignee: assigneeId }));
+        setShowModal(true);
+        // Clear URL parameters
+        setSearchParams({});
+      }, 500);
+    }
+  }, [searchParams, setSearchParams]);
 
   const fetchTasks = async () => {
     try {
@@ -364,7 +392,49 @@ const Tasks = () => {
     } catch (error) {
       console.error('Error fetching projects:', error);
     }
-  };  // Helper function to display detailed error messages
+  };
+
+  const fetchTeamMembers = async () => {
+    try {
+      const response = await axios.get('/teams');
+      // Extract all unique team members from all teams the user has access to
+      const allMembers = [];
+      response.data.forEach(team => {
+        team.members.forEach(member => {
+          if (!allMembers.find(m => m._id === member.user._id)) {
+            allMembers.push({
+              _id: member.user._id,
+              name: member.user.name,
+              email: member.user.email
+            });
+          }
+        });
+      });
+      setTeamMembers(allMembers);
+    } catch (error) {
+      console.error('Error fetching team members:', error);
+    }
+  };
+
+  const checkAssignPermissions = async () => {
+    try {
+      const response = await axios.get('/teams');
+      // Check if user is admin or manager in any team
+      let hasPermission = false;
+      response.data.forEach(team => {
+        const userMember = team.members.find(m => m.user._id === currentUser?._id);
+        if (userMember && (userMember.role === 'admin' || userMember.role === 'manager' || userMember.permissions?.canManageTeam)) {
+          hasPermission = true;
+        }
+      });
+      setCanAssignTasks(hasPermission);
+    } catch (error) {
+      console.error('Error checking assign permissions:', error);
+      setCanAssignTasks(false);
+    }
+  };
+
+  // Helper function to display detailed error messages
   const handleApiError = (error, defaultMessage) => {
     if (error.response?.data) {
       const errorData = error.response.data;
@@ -430,19 +500,18 @@ const Tasks = () => {
         toast.error('Please select a project');
       }
       return;
-    }
-      try {
+    }    try {
+      const taskData = {
+        ...formData,
+        project: formData.projectId,
+        assignee: formData.assignee || null
+      };
+      
       if (editingTask && editingTask._id) {
-        await axios.put(`/tasks/${editingTask._id}`, {
-          ...formData,
-          project: formData.projectId
-        });
+        await axios.put(`/tasks/${editingTask._id}`, taskData);
         toast.success('Task updated successfully');
       } else {
-        await axios.post('/tasks', {
-          ...formData,
-          project: formData.projectId
-        });
+        await axios.post('/tasks', taskData);
         toast.success('Task created successfully');
       }
       fetchTasks();
@@ -469,9 +538,7 @@ const Tasks = () => {
         }
       );
       return;
-    }
-
-    if (task) {
+    }    if (task) {
       setEditingTask(task);
       setFormData({
         name: task.name,
@@ -479,6 +546,7 @@ const Tasks = () => {
         priority: task.priority,
         status: task.status,
         projectId: task.project?._id || '',
+        assignee: task.assignee?._id || '',
         dueDate: task.dueDate ? task.dueDate.split('T')[0] : ''
       });
     } else {
@@ -489,12 +557,12 @@ const Tasks = () => {
         priority: 'medium',
         status: 'todo',
         projectId: '',
+        assignee: '',
         dueDate: ''
       });
     }
     setShowModal(true);
-  };
-  const closeModal = () => {
+  };  const closeModal = () => {
     setShowModal(false);
     setEditingTask(null);
     setFormData({
@@ -503,6 +571,7 @@ const Tasks = () => {
       priority: 'medium',
       status: 'todo',
       projectId: '',
+      assignee: '',
       dueDate: ''
     });
   };
@@ -723,8 +792,25 @@ const Tasks = () => {
                       {project.name}
                     </option>
                   ))}
-                </Select>
-              </FormGroup>
+                </Select>              </FormGroup>
+
+              {canAssignTasks && (
+                <FormGroup>
+                  <Label htmlFor="task-assignee">Assignee</Label>
+                  <Select
+                    id="task-assignee"
+                    value={formData.assignee}
+                    onChange={(e) => handleFormChange('assignee', e.target.value)}
+                  >
+                    <option value="">Select a team member</option>
+                    {teamMembers.map(member => (
+                      <option key={member._id} value={member._id}>
+                        {member.name} ({member.email})
+                      </option>
+                    ))}
+                  </Select>
+                </FormGroup>
+              )}
 
               <FormGroup>
                 <Label htmlFor="task-due-date">Due Date</Label>
