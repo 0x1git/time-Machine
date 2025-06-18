@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
-import { FiPlus, FiUsers, FiMail, FiEdit, FiTrash2, FiUserPlus, FiCheck, FiX } from 'react-icons/fi';
+import { FiPlus, FiUsers, FiMail, FiEdit, FiTrash2, FiUserPlus, FiX } from 'react-icons/fi';
 import axios from 'axios';
 import { toast } from 'react-toastify';
-import { usePermissions } from '../../hooks/usePermissions';
-import { PermissionGate, AdminOnly, ManagerPlus } from '../common/PermissionGate';
+import { useAuth } from '../../contexts/AuthContext';
+import { PermissionGate } from '../common/PermissionGate';
 
 const TeamsContainer = styled.div`
   max-width: 1200px;
@@ -204,6 +204,36 @@ const RoleBadge = styled.span`
   }
 `;
 
+const MemberActions = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+`;
+
+const RemoveButton = styled.button`
+  background: transparent;
+  border: none;
+  color: #ef4444;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+
+  &:hover {
+    background: #fef2f2;
+    color: #dc2626;
+  }
+
+  &:disabled {
+    color: #d1d5db;
+    cursor: not-allowed;
+  }
+`;
+
 const Modal = styled.div`
   position: fixed;
   top: 0;
@@ -379,7 +409,9 @@ const InvitationRole = styled.span`
   color: #a16207;
 `;
 
-const Teams = () => {  const [teams, setTeams] = useState([]);
+const Teams = () => {
+  const { currentUser } = useAuth();
+  const [teams, setTeams] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -395,9 +427,37 @@ const Teams = () => {  const [teams, setTeams] = useState([]);
   const [inviteForm, setInviteForm] = useState({
     email: '',
     role: 'member'
-  });
-
-  useEffect(() => {
+  });  // Check if current user can remove a member from a team
+  const canRemoveMember = (team, targetMember) => {
+    if (!currentUser || !team) {
+      return false;
+    }
+    
+    // Team owner can remove anyone except themselves
+    const ownerId = team.owner._id || team.owner;
+    if (ownerId.toString() === currentUser._id.toString()) {
+      const canRemove = targetMember.user._id.toString() !== currentUser._id.toString();
+      return canRemove;
+    }
+    
+    // Find current user's membership in the team
+    const currentUserMember = team.members.find(m => m.user._id.toString() === currentUser._id.toString());
+    
+    if (!currentUserMember) {
+      return false;
+    }
+    
+    // Admin or manager with canManageTeam permission can remove non-owners
+    const isOwner = ownerId.toString() === targetMember.user._id.toString();
+    const isSelf = targetMember.user._id.toString() === currentUser._id.toString();
+    const hasPermission = currentUserMember.role === 'admin' || currentUserMember.permissions?.canManageTeam;
+    
+    if (hasPermission && !isOwner && !isSelf) {
+      return true;
+    }
+    
+    return false;
+  };useEffect(() => {
     fetchTeams();
   }, []);
 
@@ -462,6 +522,21 @@ const Teams = () => {  const [teams, setTeams] = useState([]);
     } catch (error) {
       toast.error(error.response?.data?.message || 'Failed to cancel invitation');
       console.error('Error cancelling invitation:', error);
+    }
+  };
+
+  const handleRemoveMember = async (teamId, userId, memberName) => {
+    if (!window.confirm(`Are you sure you want to remove ${memberName} from the team?`)) {
+      return;
+    }
+
+    try {
+      await axios.delete(`/teams/${teamId}/members/${userId}`);
+      toast.success('Member removed successfully');
+      fetchTeams(); // Refresh the teams list
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to remove member');
+      console.error('Error removing member:', error);
     }
   };
 
@@ -564,8 +639,7 @@ const Teams = () => {  const [teams, setTeams] = useState([]);
               </SectionTitle>
               <MembersList>
                 {team.members?.map(member => (
-                  <MemberItem key={member.user._id}>
-                    <MemberInfo>
+                  <MemberItem key={member.user._id}>                    <MemberInfo>
                       <Avatar>
                         {getInitials(member.user.name)}
                       </Avatar>
@@ -573,10 +647,19 @@ const Teams = () => {  const [teams, setTeams] = useState([]);
                         <MemberName>{member.user.name}</MemberName>
                         <MemberEmail>{member.user.email}</MemberEmail>
                       </MemberDetails>
-                    </MemberInfo>
-                    <RoleBadge className={member.role}>
-                      {member.role}
-                    </RoleBadge>
+                    </MemberInfo>                    <MemberActions>
+                      <RoleBadge className={member.role}>
+                        {member.role}
+                      </RoleBadge>
+                      {canRemoveMember(team, member) && (
+                        <RemoveButton
+                          onClick={() => handleRemoveMember(team._id, member.user._id, member.user.name)}
+                          title={`Remove ${member.user.name} from team`}
+                        >
+                          <FiTrash2 size={14} />
+                        </RemoveButton>
+                      )}
+                    </MemberActions>
                   </MemberItem>
                 ))}
               </MembersList>
