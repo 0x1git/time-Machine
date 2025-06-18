@@ -1,11 +1,11 @@
-/node_modules
-/backend/.env
-/frontend/.env
+
+/time-tracker/backend/.env
+/time-tracker/frontend/.env
 # Ignore root-level node_modules
 /node_modules
 
 # Ignore frontend node_modules
-/frontend/node_modules
+/time-tracker/frontend/node_modules
 
 # Ignore backend node_modules
-/backend/node_modules
+/time-tracker/backend/node_modules
