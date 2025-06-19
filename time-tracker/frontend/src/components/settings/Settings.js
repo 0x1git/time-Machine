@@ -1,13 +1,23 @@
-import React, { useState } from 'react';
-import styled from 'styled-components';
-import { FiUser, FiMail, FiLock, FiBell, FiMoon, FiSun, FiShield, FiTrash2, FiAlertTriangle } from 'react-icons/fi';
-import { useAuth } from '../../contexts/AuthContext';
-import { useTheme } from '../../contexts/ThemeContext';
-import { usePermissions } from '../../hooks/usePermissions';
-import { AdminOnly } from '../common/PermissionGate';
-import { toast } from 'react-toastify';
-import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import React, { useState } from "react";
+import styled from "styled-components";
+import {
+  FiUser,
+  FiMail,
+  FiLock,
+  FiBell,
+  FiMoon,
+  FiSun,
+  FiShield,
+  FiTrash2,
+  FiAlertTriangle,
+} from "react-icons/fi";
+import { useAuth } from "../../contexts/AuthContext";
+import { useTheme } from "../../contexts/ThemeContext";
+import { usePermissions } from "../../hooks/usePermissions";
+import { AdminOnly } from "../common/PermissionGate";
+import { toast } from "react-toastify";
+import { useNavigate } from "react-router-dom";
+import axios from "axios";
 
 const SettingsContainer = styled.div`
   max-width: 800px;
@@ -151,7 +161,7 @@ const ToggleDescription = styled.div`
 const Toggle = styled.button`
   width: 48px;
   height: 24px;
-  background: ${props => props.checked ? '#3498db' : '#d1d5db'};
+  background: ${(props) => (props.checked ? "#3498db" : "#d1d5db")};
   border: none;
   border-radius: 12px;
   position: relative;
@@ -159,10 +169,10 @@ const Toggle = styled.button`
   transition: background-color 0.2s;
 
   &::after {
-    content: '';
+    content: "";
     position: absolute;
     top: 2px;
-    left: ${props => props.checked ? '26px' : '2px'};
+    left: ${(props) => (props.checked ? "26px" : "2px")};
     width: 20px;
     height: 20px;
     background: white;
@@ -284,21 +294,84 @@ const ModalButtons = styled.div`
   justify-content: flex-end;
 `;
 
+const OTPModal = styled.div`
+  background: white;
+  padding: 2rem;
+  border-radius: 12px;
+  max-width: 400px;
+  width: 90%;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+  text-align: center;
+`;
+
+const OTPTitle = styled.h3`
+  color: #2c3e50;
+  margin-bottom: 1rem;
+  font-size: 1.3rem;
+  font-weight: 600;
+`;
+
+const OTPDescription = styled.p`
+  color: #6b7280;
+  margin-bottom: 2rem;
+  line-height: 1.5;
+`;
+
+const OTPInput = styled.input`
+  width: 100%;
+  padding: 16px;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 24px;
+  text-align: center;
+  letter-spacing: 8px;
+  font-family: "Courier New", monospace;
+  margin-bottom: 1rem;
+
+  &:focus {
+    outline: none;
+    border-color: #3498db;
+    box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+  }
+
+  &.error {
+    border-color: #e74c3c;
+  }
+`;
+
+const ErrorMessage = styled.div`
+  color: #e74c3c;
+  font-size: 14px;
+  margin-bottom: 1rem;
+  text-align: center;
+`;
+
+const OTPButtons = styled.div`
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  margin-top: 1rem;
+`;
+
 const Settings = () => {
   const { currentUser, logout, updateProfile } = useAuth();
   const { isDarkMode, toggleDarkMode } = useTheme();
-  const navigate = useNavigate();const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
+  const [loading, setLoading] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
-  const [deleteConfirmation, setDeleteConfirmation] = useState('');
+  const [deleteConfirmation, setDeleteConfirmation] = useState("");
+  const [showPasswordOTP, setShowPasswordOTP] = useState(false);
+  const [otpValue, setOtpValue] = useState("");
+  const [otpError, setOtpError] = useState("");
   const [profileData, setProfileData] = useState({
-    name: currentUser?.name || '',
-    email: currentUser?.email || '',
+    name: currentUser?.name || "",
+    email: currentUser?.email || "",
   });
   const [passwordData, setPasswordData] = useState({
-    currentPassword: '',
-    newPassword: '',
-    confirmPassword: '',
+    currentPassword: "",
+    newPassword: "",
+    confirmPassword: "",
   });
   const [notifications, setNotifications] = useState({
     emailNotifications: true,
@@ -313,9 +386,9 @@ const Settings = () => {
 
     try {
       await updateProfile(profileData);
-      toast.success('Profile updated successfully');
+      toast.success("Profile updated successfully");
     } catch (error) {
-      toast.error('Failed to update profile');
+      toast.error("Failed to update profile");
     } finally {
       setLoading(false);
     }
@@ -323,52 +396,110 @@ const Settings = () => {
 
   const handlePasswordChange = async (e) => {
     e.preventDefault();
-    
+
     if (passwordData.newPassword !== passwordData.confirmPassword) {
-      toast.error('New passwords do not match');
+      toast.error("New passwords do not match");
       return;
     }
 
     if (passwordData.newPassword.length < 6) {
-      toast.error('Password must be at least 6 characters');
+      toast.error("Password must be at least 6 characters");
+      return;
+    }
+
+    if (!passwordData.currentPassword) {
+      toast.error("Current password is required");
       return;
     }
 
     setLoading(true);
     try {
-      // API call for password change would go here
-      toast.success('Password updated successfully');
-      setPasswordData({
-        currentPassword: '',
-        newPassword: '',
-        confirmPassword: '',
+      // Step 1: Send OTP for password change verification
+      await axios.post("/otp/send-login", {
+        email: currentUser.email,
       });
+
+      setShowPasswordOTP(true);
+      toast.success("Verification code sent to your email");
     } catch (error) {
-      toast.error('Failed to update password');
+      toast.error("Failed to send verification code");
     } finally {
       setLoading(false);
     }
   };
-  const handleNotificationToggle = (key) => {
-    setNotifications(prev => ({
-      ...prev,
-      [key]: !prev[key]
-    }));
-  };  const handleDeleteAccount = async () => {
-    setDeleteLoading(true);
-    
+
+  const handlePasswordOTPSubmit = async (enteredOtp) => {
+    setLoading(true);
     try {
-      await axios.delete('/users/me');
-      toast.success('Account deleted successfully');
-      logout();
-      navigate('/login');
+      // Step 2: Change password with OTP verification
+      const response = await axios.put("/users/change-password", {
+        currentPassword: passwordData.currentPassword,
+        newPassword: passwordData.newPassword,
+        otp: enteredOtp,
+      });
+
+      if (response.data.success) {
+        toast.success("Password updated successfully");
+        setPasswordData({
+          currentPassword: "",
+          newPassword: "",
+          confirmPassword: "",
+        });
+        setShowPasswordOTP(false);
+      }
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Failed to delete account');
+      toast.error(error.response?.data?.message || "Failed to update password");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePasswordOTPCancel = () => {
+    setShowPasswordOTP(false);
+    setOtpValue("");
+    setOtpError("");
+    setLoading(false);
+  };
+  const handleNotificationToggle = (key) => {
+    setNotifications((prev) => ({
+      ...prev,
+      [key]: !prev[key],
+    }));
+  };
+  const handleDeleteAccount = async () => {
+    setDeleteLoading(true);
+
+    try {
+      await axios.delete("/users/me");
+      toast.success("Account deleted successfully");
+      logout();
+      navigate("/login");
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to delete account");
     } finally {
       setDeleteLoading(false);
       setShowDeleteModal(false);
-      setDeleteConfirmation('');
+      setDeleteConfirmation("");
     }
+  };
+
+  const handleOTPChange = (e) => {
+    const value = e.target.value.replace(/\D/g, ""); // Only digits
+    if (value.length <= 6) {
+      setOtpValue(value);
+      setOtpError("");
+    }
+  };
+
+  const handleOTPSubmit = async (e) => {
+    e.preventDefault();
+
+    if (otpValue.length !== 6) {
+      setOtpError("Please enter a 6-digit code");
+      return;
+    }
+
+    await handlePasswordOTPSubmit(otpValue);
   };
 
   return (
@@ -390,7 +521,12 @@ const Settings = () => {
                 <Input
                   type="text"
                   value={profileData.name}
-                  onChange={(e) => setProfileData(prev => ({ ...prev, name: e.target.value }))}
+                  onChange={(e) =>
+                    setProfileData((prev) => ({
+                      ...prev,
+                      name: e.target.value,
+                    }))
+                  }
                   placeholder="Enter your full name"
                 />
               </FormGroup>
@@ -400,7 +536,12 @@ const Settings = () => {
                 <Input
                   type="email"
                   value={profileData.email}
-                  onChange={(e) => setProfileData(prev => ({ ...prev, email: e.target.value }))}
+                  onChange={(e) =>
+                    setProfileData((prev) => ({
+                      ...prev,
+                      email: e.target.value,
+                    }))
+                  }
                   placeholder="Enter your email"
                 />
               </FormGroup>
@@ -408,7 +549,7 @@ const Settings = () => {
 
             <ButtonGroup>
               <Button type="submit" className="primary" disabled={loading}>
-                {loading ? 'Updating...' : 'Update Profile'}
+                {loading ? "Updating..." : "Update Profile"}
               </Button>
             </ButtonGroup>
           </form>
@@ -429,7 +570,12 @@ const Settings = () => {
               <Input
                 type="password"
                 value={passwordData.currentPassword}
-                onChange={(e) => setPasswordData(prev => ({ ...prev, currentPassword: e.target.value }))}
+                onChange={(e) =>
+                  setPasswordData((prev) => ({
+                    ...prev,
+                    currentPassword: e.target.value,
+                  }))
+                }
                 placeholder="Enter current password"
               />
             </FormGroup>
@@ -440,7 +586,12 @@ const Settings = () => {
                 <Input
                   type="password"
                   value={passwordData.newPassword}
-                  onChange={(e) => setPasswordData(prev => ({ ...prev, newPassword: e.target.value }))}
+                  onChange={(e) =>
+                    setPasswordData((prev) => ({
+                      ...prev,
+                      newPassword: e.target.value,
+                    }))
+                  }
                   placeholder="Enter new password"
                 />
               </FormGroup>
@@ -450,7 +601,12 @@ const Settings = () => {
                 <Input
                   type="password"
                   value={passwordData.confirmPassword}
-                  onChange={(e) => setPasswordData(prev => ({ ...prev, confirmPassword: e.target.value }))}
+                  onChange={(e) =>
+                    setPasswordData((prev) => ({
+                      ...prev,
+                      confirmPassword: e.target.value,
+                    }))
+                  }
                   placeholder="Confirm new password"
                 />
               </FormGroup>
@@ -458,7 +614,7 @@ const Settings = () => {
 
             <ButtonGroup>
               <Button type="submit" className="primary" disabled={loading}>
-                {loading ? 'Updating...' : 'Change Password'}
+                {loading ? "Updating..." : "Change Password"}
               </Button>
             </ButtonGroup>
           </form>
@@ -482,7 +638,7 @@ const Settings = () => {
             </ToggleInfo>
             <Toggle
               checked={notifications.emailNotifications}
-              onClick={() => handleNotificationToggle('emailNotifications')}
+              onClick={() => handleNotificationToggle("emailNotifications")}
             />
           </ToggleGroup>
 
@@ -495,7 +651,7 @@ const Settings = () => {
             </ToggleInfo>
             <Toggle
               checked={notifications.pushNotifications}
-              onClick={() => handleNotificationToggle('pushNotifications')}
+              onClick={() => handleNotificationToggle("pushNotifications")}
             />
           </ToggleGroup>
 
@@ -508,7 +664,7 @@ const Settings = () => {
             </ToggleInfo>
             <Toggle
               checked={notifications.weeklyReports}
-              onClick={() => handleNotificationToggle('weeklyReports')}
+              onClick={() => handleNotificationToggle("weeklyReports")}
             />
           </ToggleGroup>
 
@@ -521,7 +677,7 @@ const Settings = () => {
             </ToggleInfo>
             <Toggle
               checked={notifications.taskReminders}
-              onClick={() => handleNotificationToggle('taskReminders')}
+              onClick={() => handleNotificationToggle("taskReminders")}
             />
           </ToggleGroup>
         </SectionContent>
@@ -544,8 +700,10 @@ const Settings = () => {
             </ToggleInfo>
             <ThemeToggle onClick={toggleDarkMode}>
               {isDarkMode ? <FiMoon size={16} /> : <FiSun size={16} />}
-              {isDarkMode ? 'Dark' : 'Light'} Mode
-            </ThemeToggle>          </ToggleGroup>        </SectionContent>
+              {isDarkMode ? "Dark" : "Light"} Mode
+            </ThemeToggle>{" "}
+          </ToggleGroup>{" "}
+        </SectionContent>
       </SettingsSection>
 
       {/* Danger Zone */}
@@ -563,10 +721,11 @@ const Settings = () => {
               Delete Account
             </DangerTitle>
             <DangerDescription>
-              Once you delete your account, there is no going back. This action will permanently 
-              delete your account and remove all of your data from our servers. This cannot be undone.
+              Once you delete your account, there is no going back. This action
+              will permanently delete your account and remove all of your data
+              from our servers. This cannot be undone.
             </DangerDescription>
-            <DangerButton 
+            <DangerButton
               onClick={() => setShowDeleteModal(true)}
               disabled={deleteLoading}
             >
@@ -587,9 +746,11 @@ const Settings = () => {
             </SectionTitle>
           </SectionHeader>
           <SectionContent>
-            <div style={{ padding: '20px', textAlign: 'center', color: '#666' }}>
+            <div
+              style={{ padding: "20px", textAlign: "center", color: "#666" }}
+            >
               <p>Admin-only features will be displayed here:</p>
-              <ul style={{ textAlign: 'left', marginTop: '16px' }}>
+              <ul style={{ textAlign: "left", marginTop: "16px" }}>
                 <li>• User role management</li>
                 <li>• System-wide permissions</li>
                 <li>• Audit logs</li>
@@ -597,7 +758,8 @@ const Settings = () => {
                 <li>• System settings</li>
               </ul>
             </div>
-          </SectionContent>        </SettingsSection>
+          </SectionContent>{" "}
+        </SettingsSection>
       </AdminOnly>
 
       {/* Delete Account Modal */}
@@ -609,10 +771,17 @@ const Settings = () => {
               Confirm Account Deletion
             </ModalTitle>
             <ModalText>
-              Are you absolutely sure you want to delete your account? This action cannot be undone 
-              and will permanently remove all of your data, including:
+              Are you absolutely sure you want to delete your account? This
+              action cannot be undone and will permanently remove all of your
+              data, including:
             </ModalText>
-            <ul style={{ marginBottom: '20px', paddingLeft: '20px', color: '#374151' }}>
+            <ul
+              style={{
+                marginBottom: "20px",
+                paddingLeft: "20px",
+                color: "#374151",
+              }}
+            >
               <li>Your profile and account information</li>
               <li>All projects and tasks you've created</li>
               <li>Time tracking history</li>
@@ -620,32 +789,76 @@ const Settings = () => {
             </ul>
             <ModalText>
               <strong>Type "DELETE" to confirm:</strong>
-            </ModalText>            <Input
+            </ModalText>{" "}
+            <Input
               type="text"
               placeholder="Type DELETE to confirm"
               value={deleteConfirmation}
               onChange={(e) => setDeleteConfirmation(e.target.value)}
-              style={{ marginBottom: '20px' }}
+              style={{ marginBottom: "20px" }}
             />
             <ModalButtons>
-              <Button 
-                className="secondary" 
+              <Button
+                className="secondary"
                 onClick={() => {
                   setShowDeleteModal(false);
-                  setDeleteConfirmation('');
+                  setDeleteConfirmation("");
                 }}
                 disabled={deleteLoading}
               >
                 Cancel
               </Button>
-              <DangerButton 
+              <DangerButton
                 onClick={handleDeleteAccount}
-                disabled={deleteConfirmation !== 'DELETE' || deleteLoading}
+                disabled={deleteConfirmation !== "DELETE" || deleteLoading}
               >
                 <FiTrash2 size={16} />
-                {deleteLoading ? 'Deleting...' : 'Delete Account'}
+                {deleteLoading ? "Deleting..." : "Delete Account"}
               </DangerButton>
             </ModalButtons>
+          </ModalContent>
+        </Modal>
+      )}
+
+      {/* Password Change OTP Modal */}
+      {showPasswordOTP && (
+        <Modal onClick={handlePasswordOTPCancel}>
+          <ModalContent onClick={(e) => e.stopPropagation()}>
+            <OTPModal>
+              <OTPTitle>Verify Password Change</OTPTitle>
+              <OTPDescription>
+                We've sent a verification code to {currentUser?.email}. Please
+                enter it below to confirm your password change.
+              </OTPDescription>
+              <form onSubmit={handleOTPSubmit}>
+                <OTPInput
+                  type="text"
+                  placeholder="Enter 6-digit OTP"
+                  value={otpValue}
+                  onChange={handleOTPChange}
+                  className={otpError ? "error" : ""}
+                  maxLength="6"
+                />
+                {otpError && <ErrorMessage>{otpError}</ErrorMessage>}
+                <OTPButtons>
+                  <Button
+                    type="button"
+                    className="secondary"
+                    onClick={handlePasswordOTPCancel}
+                    disabled={loading}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="submit"
+                    className="primary"
+                    disabled={otpValue.length !== 6 || loading}
+                  >
+                    {loading ? "Verifying..." : "Verify OTP"}
+                  </Button>
+                </OTPButtons>
+              </form>
+            </OTPModal>
           </ModalContent>
         </Modal>
       )}

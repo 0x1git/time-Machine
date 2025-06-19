@@ -1,8 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { useAuth } from '../../contexts/AuthContext';
-import styled from 'styled-components';
-import axios from 'axios';
+import React, { useState, useEffect } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { useAuth } from "../../contexts/AuthContext";
+import OTPVerification from "./OTPVerification";
+import styled from "styled-components";
+import axios from "axios";
+import { toast } from "react-toastify";
 
 const RegisterContainer = styled.div`
   min-height: 100vh;
@@ -11,6 +13,7 @@ const RegisterContainer = styled.div`
   justify-content: center;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   padding: 20px;
+  overflow-y: auto;
 `;
 
 const RegisterCard = styled.div`
@@ -19,21 +22,43 @@ const RegisterCard = styled.div`
   border-radius: 12px;
   box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1);
   width: 100%;
-  max-width: 400px;
+  max-width: 500px;
+  margin: auto;
+
+  @media (max-height: 800px) {
+    margin: 20px auto;
+    max-height: calc(100vh - 40px);
+    overflow-y: auto;
+  }
+
+  @media (max-width: 480px) {
+    padding: 1.5rem;
+    margin: 10px;
+    max-width: calc(100vw - 20px);
+  }
 `;
 
 const Logo = styled.h1`
   text-align: center;
-  margin-bottom: 2rem;
+  margin-bottom: 1.5rem;
   color: #2c3e50;
-  font-size: 2rem;
+  font-size: 1.8rem;
   font-weight: 700;
+
+  @media (max-height: 800px) {
+    margin-bottom: 1rem;
+    font-size: 1.6rem;
+  }
 `;
 
 const Form = styled.form`
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 0.8rem;
+
+  @media (max-height: 800px) {
+    gap: 0.6rem;
+  }
 `;
 
 const InputGroup = styled.div`
@@ -42,13 +67,14 @@ const InputGroup = styled.div`
 `;
 
 const Label = styled.label`
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.3rem;
   font-weight: 500;
   color: #374151;
+  font-size: 14px;
 `;
 
 const Input = styled.input`
-  padding: 12px;
+  padding: 10px 12px;
   border: 1px solid #d1d5db;
   border-radius: 6px;
   font-size: 14px;
@@ -58,6 +84,10 @@ const Input = styled.input`
     outline: none;
     border-color: #3498db;
     box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+  }
+
+  @media (max-height: 800px) {
+    padding: 8px 12px;
   }
 `;
 
@@ -71,7 +101,7 @@ const Button = styled.button`
   font-weight: 500;
   cursor: pointer;
   transition: background-color 0.2s;
-  margin-top: 1rem;
+  margin-top: 0.8rem;
 
   &:hover:not(:disabled) {
     background: #2980b9;
@@ -81,19 +111,30 @@ const Button = styled.button`
     opacity: 0.6;
     cursor: not-allowed;
   }
+
+  @media (max-height: 800px) {
+    padding: 10px;
+    font-size: 15px;
+    margin-top: 0.5rem;
+  }
 `;
 
 const ErrorMessage = styled.div`
   color: #e74c3c;
-  font-size: 14px;
-  margin-top: 0.5rem;
+  font-size: 13px;
+  margin-top: 0.3rem;
   text-align: center;
+
+  @media (max-height: 800px) {
+    font-size: 12px;
+  }
 `;
 
 const LinkText = styled.p`
   text-align: center;
-  margin-top: 1.5rem;
+  margin-top: 1rem;
   color: #6b7280;
+  font-size: 14px;
 
   a {
     color: #3498db;
@@ -103,6 +144,11 @@ const LinkText = styled.p`
     &:hover {
       text-decoration: underline;
     }
+  }
+
+  @media (max-height: 800px) {
+    margin-top: 0.8rem;
+    font-size: 13px;
   }
 `;
 
@@ -138,29 +184,35 @@ const LoadingSpinner = styled.div`
   margin-right: 8px;
 
   @keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
+    0% {
+      transform: rotate(0deg);
+    }
+    100% {
+      transform: rotate(360deg);
+    }
   }
 `;
 
 const Register = () => {
   const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    password: '',
-    confirmPassword: '',
-    companyName: ''
+    name: "",
+    email: "",
+    password: "",
+    confirmPassword: "",
+    companyName: "",
   });
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
   const [invitationData, setInvitationData] = useState(null);
   const [loadingInvitation, setLoadingInvitation] = useState(false);
+  const [showEmailVerification, setShowEmailVerification] = useState(false);
+  const [emailVerified, setEmailVerified] = useState(false);
 
-  const { register } = useAuth();
+  const { registerWithOTP } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const returnUrl = searchParams.get('returnUrl');
-  const invitationToken = searchParams.get('invitationToken');
+  const returnUrl = searchParams.get("returnUrl");
+  const invitationToken = searchParams.get("invitationToken");
 
   // Load invitation details if token is present
   useEffect(() => {
@@ -174,16 +226,16 @@ const Register = () => {
     try {
       const response = await axios.get(`/teams/invitation/${invitationToken}`);
       setInvitationData(response.data);
-      
+
       // Pre-fill email and company name from invitation
-      setFormData(prev => ({
+      setFormData((prev) => ({
         ...prev,
         email: response.data.email,
-        companyName: response.data.organizationName
+        companyName: response.data.organizationName,
       }));
     } catch (error) {
-      console.error('Failed to load invitation:', error);
-      setError('Invalid or expired invitation link');
+      console.error("Failed to load invitation:", error);
+      setError("Invalid or expired invitation link");
     } finally {
       setLoadingInvitation(false);
     }
@@ -192,55 +244,131 @@ const Register = () => {
   const handleChange = (e) => {
     setFormData({
       ...formData,
-      [e.target.name]: e.target.value
+      [e.target.name]: e.target.value,
     });
   };
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    setError('');
+    setError("");
 
     if (formData.password !== formData.confirmPassword) {
-      setError('Passwords do not match');
+      setError("Passwords do not match");
       setLoading(false);
       return;
     }
 
     if (formData.password.length < 6) {
-      setError('Password must be at least 6 characters');
+      setError("Password must be at least 6 characters");
       setLoading(false);
       return;
     }
 
     // Company name is only required if not joining via invitation
     if (!invitationToken && !formData.companyName.trim()) {
-      setError('Company name is required');
+      setError("Company name is required");
       setLoading(false);
       return;
     }
 
     try {
-      await register(
-        formData.name, 
-        formData.email, 
-        formData.password, 
-        formData.companyName,
-        invitationToken
-      );
-      
-      // Redirect to returnUrl if present, otherwise dashboard
-      navigate(returnUrl || '/dashboard');
+      if (!emailVerified) {
+        // First step: Send email verification OTP
+        await axios.post("/otp/send-verification", {
+          email: formData.email,
+          name: formData.name,
+        });
+
+        setShowEmailVerification(true);
+        toast.success("Verification code sent to your email");
+      } else {
+        // This shouldn't happen as the form should be hidden when email is verified
+        setError("Email already verified. Please proceed with registration.");
+      }
     } catch (err) {
-      setError(err.response?.data?.message || 'Registration failed');
+      setError(
+        err.response?.data?.message || "Failed to send verification email"
+      );
     } finally {
       setLoading(false);
     }
   };
+
+  const handleEmailVerificationSuccess = async (otpData) => {
+    setEmailVerified(true);
+    setShowEmailVerification(false);
+
+    // Now proceed with actual registration
+    // The email verification was successful, so we can register without re-verifying OTP
+    setLoading(true);
+    try {
+      const registrationData = {
+        name: formData.name,
+        email: formData.email,
+        password: formData.password,
+        companyName: formData.companyName,
+        emailVerified: true, // Flag to indicate email was already verified
+      };
+
+      if (invitationToken) {
+        registrationData.invitationToken = invitationToken;
+      }
+
+      // Call the backend registration endpoint
+      const response = await axios.post("/auth/register", registrationData);
+
+      if (response.data.token) {
+        // Save auth data
+        localStorage.setItem("token", response.data.token);
+        localStorage.setItem("user", JSON.stringify(response.data.user));
+        if (response.data.organization) {
+          localStorage.setItem(
+            "organization",
+            JSON.stringify(response.data.organization)
+          );
+        }
+
+        // Set axios auth header
+        axios.defaults.headers.common[
+          "Authorization"
+        ] = `Bearer ${response.data.token}`;
+
+        toast.success("Account created successfully!");
+        navigate(returnUrl || "/dashboard");
+      }
+    } catch (err) {
+      setError(err.response?.data?.message || "Registration failed");
+      setEmailVerified(false); // Reset if registration fails
+      toast.error("Registration failed. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCancelEmailVerification = () => {
+    setShowEmailVerification(false);
+    setLoading(false);
+  };
+
+  if (showEmailVerification) {
+    return (
+      <RegisterContainer>
+        <OTPVerification
+          email={formData.email}
+          type="email_verification"
+          onVerificationSuccess={handleEmailVerificationSuccess}
+          onCancel={handleCancelEmailVerification}
+          title="Verify Your Email"
+          description={`We've sent a verification code to ${formData.email}. Please enter the code to continue with your registration.`}
+        />
+      </RegisterContainer>
+    );
+  }
   return (
     <RegisterContainer>
       <RegisterCard>
         <Logo>TimeTracker</Logo>
-        
+
         {loadingInvitation && (
           <InvitationInfo>
             <LoadingSpinner />
@@ -252,7 +380,10 @@ const Register = () => {
           <InvitationInfo>
             <InvitationTitle>Team Invitation</InvitationTitle>
             <InvitationDetails>
-              You've been invited to join <strong>{invitationData.teamName}</strong> at <strong>{invitationData.organizationName}</strong> as a <strong>{invitationData.role}</strong>.
+              You've been invited to join{" "}
+              <strong>{invitationData.teamName}</strong> at{" "}
+              <strong>{invitationData.organizationName}</strong> as a{" "}
+              <strong>{invitationData.role}</strong>.
             </InvitationDetails>
           </InvitationInfo>
         )}
@@ -269,7 +400,7 @@ const Register = () => {
               placeholder="Enter your full name"
               required
             />
-          </InputGroup>          
+          </InputGroup>
 
           <InputGroup>
             <Label htmlFor="email">Email</Label>
@@ -307,7 +438,7 @@ const Register = () => {
                 type="text"
                 value={formData.companyName}
                 disabled
-                style={{ backgroundColor: '#f5f5f5', cursor: 'not-allowed' }}
+                style={{ backgroundColor: "#f5f5f5", cursor: "not-allowed" }}
               />
             </InputGroup>
           )}
@@ -344,16 +475,25 @@ const Register = () => {
             {loading ? (
               <div className="flex items-center justify-center">
                 <LoadingSpinner />
-                {invitationData ? 'Joining team...' : 'Creating account...'}
+                {invitationData ? "Joining team..." : "Creating account..."}
               </div>
+            ) : invitationData ? (
+              "Join Team"
             ) : (
-              invitationData ? 'Join Team' : 'Create Account'
+              "Create Account"
             )}
           </Button>
         </Form>
 
         <LinkText>
-          Already have an account? <Link to={`/login${returnUrl ? `?returnUrl=${encodeURIComponent(returnUrl)}` : ''}`}>Sign in</Link>
+          Already have an account?{" "}
+          <Link
+            to={`/login${
+              returnUrl ? `?returnUrl=${encodeURIComponent(returnUrl)}` : ""
+            }`}
+          >
+            Sign in
+          </Link>
         </LinkText>
       </RegisterCard>
     </RegisterContainer>

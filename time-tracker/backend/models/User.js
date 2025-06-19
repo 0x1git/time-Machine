@@ -1,91 +1,103 @@
-const mongoose = require('mongoose');
-const bcrypt = require('bcryptjs');
+const mongoose = require("mongoose");
+const bcrypt = require("bcryptjs");
 
-const userSchema = new mongoose.Schema({
-  name: {
-    type: String,
-    required: true,
-    trim: true
+const userSchema = new mongoose.Schema(
+  {
+    name: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    email: {
+      type: String,
+      required: true,
+      unique: true,
+      lowercase: true,
+      trim: true,
+    },
+    password: {
+      type: String,
+      required: true,
+      minlength: 6,
+    },
+    isEmailVerified: {
+      type: Boolean,
+      default: false,
+    },
+    emailVerificationRequired: {
+      type: Boolean,
+      default: true,
+    },
+    organization: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Organization",
+      // Note: required for existing users, but handled in registration logic
+    },
+    role: {
+      type: String,
+      enum: ["admin", "manager", "member"],
+      default: "admin", // Changed: New users are admin by default
+    },
+    permissions: {
+      // User management
+      canManageUsers: { type: Boolean, default: false },
+      canViewAllUsers: { type: Boolean, default: false },
+      canEditUserRoles: { type: Boolean, default: false },
+
+      // Project management
+      canManageAllProjects: { type: Boolean, default: false },
+      canCreateProjects: { type: Boolean, default: false },
+      canEditOwnProjects: { type: Boolean, default: true },
+      canDeleteProjects: { type: Boolean, default: false },
+      canViewAllProjects: { type: Boolean, default: false },
+
+      // Task management
+      canManageAllTasks: { type: Boolean, default: false },
+      canCreateTasks: { type: Boolean, default: true },
+      canEditOwnTasks: { type: Boolean, default: true },
+      canDeleteTasks: { type: Boolean, default: false },
+
+      // Time tracking
+      canViewAllTimeEntries: { type: Boolean, default: false },
+      canEditAllTimeEntries: { type: Boolean, default: false },
+      canDeleteTimeEntries: { type: Boolean, default: false },
+      canManageBreaks: { type: Boolean, default: true },
+
+      // Team management
+      canManageTeams: { type: Boolean, default: false },
+      canInviteUsers: { type: Boolean, default: false },
+      canAssignRoles: { type: Boolean, default: false },
+
+      // Reports and analytics
+      canViewAllReports: { type: Boolean, default: false },
+      canViewTeamReports: { type: Boolean, default: false },
+      canExportReports: { type: Boolean, default: false },
+
+      // System settings
+      canManageSettings: { type: Boolean, default: false },
+      canAccessKiosk: { type: Boolean, default: false },
+    },
+    avatar: {
+      type: String,
+      default: "",
+    },
+    isActive: {
+      type: Boolean,
+      default: true,
+    },
+    lastLogin: {
+      type: Date,
+    },
   },
-  email: {
-    type: String,
-    required: true,
-    unique: true,
-    lowercase: true,
-    trim: true
-  },
-  password: {
-    type: String,
-    required: true,
-    minlength: 6
-  },  organization: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Organization'
-    // Note: required for existing users, but handled in registration logic
-  },
-  role: {
-    type: String,
-    enum: ['admin', 'manager', 'member'],
-    default: 'admin'  // Changed: New users are admin by default
-  },
-  permissions: {
-    // User management
-    canManageUsers: { type: Boolean, default: false },
-    canViewAllUsers: { type: Boolean, default: false },
-    canEditUserRoles: { type: Boolean, default: false },
-    
-    // Project management
-    canManageAllProjects: { type: Boolean, default: false },
-    canCreateProjects: { type: Boolean, default: false },
-    canEditOwnProjects: { type: Boolean, default: true },
-    canDeleteProjects: { type: Boolean, default: false },
-    canViewAllProjects: { type: Boolean, default: false },
-    
-    // Task management
-    canManageAllTasks: { type: Boolean, default: false },
-    canCreateTasks: { type: Boolean, default: true },
-    canEditOwnTasks: { type: Boolean, default: true },
-    canDeleteTasks: { type: Boolean, default: false },
-    
-    // Time tracking
-    canViewAllTimeEntries: { type: Boolean, default: false },
-    canEditAllTimeEntries: { type: Boolean, default: false },
-    canDeleteTimeEntries: { type: Boolean, default: false },
-    canManageBreaks: { type: Boolean, default: true },
-    
-    // Team management
-    canManageTeams: { type: Boolean, default: false },
-    canInviteUsers: { type: Boolean, default: false },
-    canAssignRoles: { type: Boolean, default: false },
-    
-    // Reports and analytics
-    canViewAllReports: { type: Boolean, default: false },
-    canViewTeamReports: { type: Boolean, default: false },
-    canExportReports: { type: Boolean, default: false },
-    
-    // System settings
-    canManageSettings: { type: Boolean, default: false },
-    canAccessKiosk: { type: Boolean, default: false }
-  },
-  avatar: {
-    type: String,
-    default: ''
-  },
-  isActive: {
-    type: Boolean,
-    default: true
-  },
-  lastLogin: {
-    type: Date
+  {
+    timestamps: true,
   }
-}, {
-  timestamps: true
-});
+);
 
 // Hash password before saving
-userSchema.pre('save', async function(next) {
-  if (!this.isModified('password')) return next();
-  
+userSchema.pre("save", async function (next) {
+  if (!this.isModified("password")) return next();
+
   try {
     const salt = await bcrypt.genSalt(10);
     this.password = await bcrypt.hash(this.password, salt);
@@ -96,8 +108,8 @@ userSchema.pre('save', async function(next) {
 });
 
 // Set permissions based on role
-userSchema.pre('save', function(next) {
-  if (this.isModified('role') || this.isNew) {
+userSchema.pre("save", function (next) {
+  if (this.isModified("role") || this.isNew) {
     const permissions = getPermissionsByRole(this.role);
     this.permissions = { ...this.permissions.toObject(), ...permissions };
   }
@@ -107,9 +119,9 @@ userSchema.pre('save', function(next) {
 // Helper function to get permissions by role
 function getPermissionsByRole(role) {
   const permissions = {};
-  
+
   switch (role) {
-    case 'admin':
+    case "admin":
       // Admin has all permissions
       return {
         canManageUsers: true,
@@ -135,10 +147,10 @@ function getPermissionsByRole(role) {
         canViewTeamReports: true,
         canExportReports: true,
         canManageSettings: true,
-        canAccessKiosk: true
+        canAccessKiosk: true,
       };
-      
-    case 'manager':
+
+    case "manager":
       // Manager has team-level permissions
       return {
         canManageUsers: false,
@@ -164,9 +176,9 @@ function getPermissionsByRole(role) {
         canViewTeamReports: true,
         canExportReports: true,
         canManageSettings: false,
-        canAccessKiosk: true
+        canAccessKiosk: true,
       };
-        case 'member':
+    case "member":
     default:
       // Member has basic permissions plus some additional access
       return {
@@ -193,21 +205,21 @@ function getPermissionsByRole(role) {
         canViewTeamReports: true, // Updated: Members can now view team reports
         canExportReports: false,
         canManageSettings: false,
-        canAccessKiosk: true // Updated: Members can now access kiosk
+        canAccessKiosk: true, // Updated: Members can now access kiosk
       };
   }
 }
 
 // Compare password method
-userSchema.methods.comparePassword = async function(candidatePassword) {
+userSchema.methods.comparePassword = async function (candidatePassword) {
   return bcrypt.compare(candidatePassword, this.password);
 };
 
 // Remove password from JSON output
-userSchema.methods.toJSON = function() {
+userSchema.methods.toJSON = function () {
   const user = this.toObject();
   delete user.password;
   return user;
 };
 
-module.exports = mongoose.model('User', userSchema);
+module.exports = mongoose.model("User", userSchema);

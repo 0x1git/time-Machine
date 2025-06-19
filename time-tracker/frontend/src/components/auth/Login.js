@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { useAuth } from '../../contexts/AuthContext';
-import styled from 'styled-components';
+import React, { useState } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { useAuth } from "../../contexts/AuthContext";
+import OTPVerification from "./OTPVerification";
+import styled from "styled-components";
+import axios from "axios";
 
 const LoginContainer = styled.div`
   min-height: 100vh;
@@ -105,40 +107,134 @@ const LinkText = styled.p`
   }
 `;
 
+const CheckboxContainer = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 1rem 0;
+`;
+
+const Checkbox = styled.input`
+  width: 16px;
+  height: 16px;
+`;
+
+const CheckboxLabel = styled.label`
+  font-size: 14px;
+  color: #374151;
+  cursor: pointer;
+`;
+
 const Login = () => {
   const [formData, setFormData] = useState({
-    email: '',
-    password: ''
+    email: "",
+    password: "",
   });
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
+  const [showOTPVerification, setShowOTPVerification] = useState(false);
+  const [require2FA, setRequire2FA] = useState(false);
 
   const { login } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const returnUrl = searchParams.get('returnUrl');
+  const returnUrl = searchParams.get("returnUrl");
 
   const handleChange = (e) => {
     setFormData({
       ...formData,
-      [e.target.name]: e.target.value
+      [e.target.name]: e.target.value,
     });
   };
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    setError('');
+    setError("");
 
     try {
-      await login(formData.email, formData.password);
-      // Redirect to returnUrl if present, otherwise dashboard
-      navigate(returnUrl || '/dashboard');
+      if (require2FA) {
+        // For 2FA: First validate credentials, then request OTP
+        const loginResponse = await axios.post("/auth/login", {
+          email: formData.email,
+          password: formData.password,
+          require2FA: true,
+        });
+
+        if (loginResponse.data.require2FA) {
+          // Credentials are valid, now send OTP
+          await axios.post("/otp/send-login", { email: formData.email });
+          setShowOTPVerification(true);
+        } else {
+          // Credentials are valid but no 2FA needed
+          await login(formData.email, formData.password);
+          navigate(returnUrl || "/dashboard");
+        }
+      } else {
+        // Regular login without 2FA
+        await login(formData.email, formData.password);
+        navigate(returnUrl || "/dashboard");
+      }
     } catch (err) {
-      setError(err.response?.data?.message || 'Login failed');
+      const errorMsg = err.response?.data?.message || "Login failed";
+      setError(errorMsg);
+
+      // If email verification is required, show appropriate message
+      if (err.response?.data?.requireEmailVerification) {
+        setError(
+          "Please verify your email before logging in. Check your inbox for the verification code."
+        );
+      }
     } finally {
       setLoading(false);
     }
   };
+
+  const handleOTPVerificationSuccess = async (otpData) => {
+    try {
+      // OTP verification was successful and returned login data
+      if (otpData.token && otpData.user) {
+        // Store auth data
+        localStorage.setItem("token", otpData.token);
+        localStorage.setItem("user", JSON.stringify(otpData.user));
+        if (otpData.organization) {
+          localStorage.setItem(
+            "organization",
+            JSON.stringify(otpData.organization)
+          );
+        }
+
+        // Set axios default header for future requests
+        axios.defaults.headers.common[
+          "Authorization"
+        ] = `Bearer ${otpData.token}`;
+
+        // Navigate to dashboard
+        navigate(returnUrl || "/dashboard");
+        window.location.reload(); // Refresh to update auth context
+      }
+    } catch (err) {
+      setError("Login failed after OTP verification");
+      setShowOTPVerification(false);
+    }
+  };
+
+  const handleCancelOTP = () => {
+    setShowOTPVerification(false);
+    setLoading(false);
+  };
+
+  if (showOTPVerification) {
+    return (
+      <LoginContainer>
+        <OTPVerification
+          email={formData.email}
+          type="login_2fa"
+          onVerificationSuccess={handleOTPVerificationSuccess}
+          onCancel={handleCancelOTP}
+        />
+      </LoginContainer>
+    );
+  }
 
   return (
     <LoginContainer>
@@ -171,6 +267,18 @@ const Login = () => {
             />
           </InputGroup>
 
+          <CheckboxContainer>
+            <Checkbox
+              type="checkbox"
+              id="require2FA"
+              checked={require2FA}
+              onChange={(e) => setRequire2FA(e.target.checked)}
+            />
+            <CheckboxLabel htmlFor="require2FA">
+              Enable two-factor authentication
+            </CheckboxLabel>
+          </CheckboxContainer>
+
           {error && <ErrorMessage>{error}</ErrorMessage>}
 
           <Button type="submit" disabled={loading}>
@@ -180,11 +288,19 @@ const Login = () => {
                 Signing in...
               </div>
             ) : (
-              'Sign In'
+              "Sign In"
             )}
           </Button>
-        </Form>        <LinkText>
-          Don't have an account? <Link to={`/register${returnUrl ? `?returnUrl=${encodeURIComponent(returnUrl)}` : ''}`}>Sign up</Link>
+        </Form>{" "}
+        <LinkText>
+          Don't have an account?{" "}
+          <Link
+            to={`/register${
+              returnUrl ? `?returnUrl=${encodeURIComponent(returnUrl)}` : ""
+            }`}
+          >
+            Sign up
+          </Link>
         </LinkText>
       </LoginCard>
     </LoginContainer>

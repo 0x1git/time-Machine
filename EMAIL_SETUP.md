@@ -1,8 +1,8 @@
 # Email Setup Guide for Time Tracker
 
-## Setting up Gmail for Sending Invitation Emails
+## Setting up Gmail for Sending Invitation Emails and OTP Verification
 
-To enable email functionality for team invitations, you need to configure Gmail with an App Password.
+To enable email functionality for team invitations and OTP verification, you need to configure Gmail with an App Password.
 
 ### Step 1: Enable 2-Factor Authentication on your Gmail account
 
@@ -31,6 +31,7 @@ EMAIL_PASS=your-16-character-app-password
 ```
 
 **Example:**
+
 ```env
 EMAIL_USER=john.doe@gmail.com
 EMAIL_PASS=abcd efgh ijkl mnop
@@ -47,9 +48,9 @@ npm run dev
 
 ### Step 5: Test Email Functionality
 
-1. Go to the Teams section in your app
-2. Create a team
-3. Click "Invite Members" and enter an email address
+1. **Test Registration OTP**: Create a new account and verify you receive the 6-digit verification code
+2. **Test Login 2FA**: Enable 2FA during login and verify you receive the login verification code
+3. **Test Team Invitations**: Go to the Teams section and invite a new member
 4. Check the recipient's email inbox for the invitation
 
 ## Important Security Notes
@@ -62,16 +63,19 @@ npm run dev
 ## Troubleshooting
 
 ### "Authentication failed" error:
+
 - Double-check your email and app password in .env
 - Make sure 2-factor authentication is enabled
 - Ensure you're using the App Password, not your regular password
 
 ### Emails not being received:
+
 - Check spam/junk folder
 - Verify the recipient email address is correct
 - Check server logs for email sending errors
 
 ### "Less secure app access" error:
+
 - This shouldn't happen with App Passwords
 - If it does, make sure you're using App Password, not regular password
 
@@ -80,26 +84,28 @@ npm run dev
 If you prefer not to use Gmail, you can modify the email service to use other providers:
 
 ### SendGrid:
+
 ```javascript
 // In emailService.js
 const transporter = nodemailer.createTransporter({
-  service: 'SendGrid',
+  service: "SendGrid",
   auth: {
-    user: 'apikey',
-    pass: process.env.SENDGRID_API_KEY
-  }
+    user: "apikey",
+    pass: process.env.SENDGRID_API_KEY,
+  },
 });
 ```
 
 ### Outlook/Hotmail:
+
 ```javascript
 // In emailService.js
 const transporter = nodemailer.createTransporter({
-  service: 'hotmail',
+  service: "hotmail",
   auth: {
     user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS
-  }
+    pass: process.env.EMAIL_PASS,
+  },
 });
 ```
 
