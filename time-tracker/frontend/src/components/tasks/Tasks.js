@@ -193,6 +193,14 @@ const Modal = styled.div`
   align-items: center;
   justify-content: center;
   z-index: 1000;
+  padding: 20px;
+  box-sizing: border-box;
+  overflow-y: auto;
+
+  @media (max-height: 600px) {
+    align-items: flex-start;
+    padding-top: 10px;
+  }
 `;
 
 const ModalContent = styled.div`
@@ -200,8 +208,22 @@ const ModalContent = styled.div`
   border-radius: 12px;
   padding: 24px;
   width: 100%;
-  max-width: 500px;
-  margin: 20px;
+  max-width: 600px;
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+  margin: auto;
+  box-sizing: border-box;
+
+  @media (max-width: 768px) {
+    max-width: 95vw;
+    padding: 20px;
+    margin: 10px;
+  }
+
+  @media (max-height: 600px) {
+    max-height: calc(100vh - 20px);
+    padding: 16px;
+  }
 `;
 
 const ModalHeader = styled.div`
@@ -209,6 +231,17 @@ const ModalHeader = styled.div`
   justify-content: space-between;
   align-items: center;
   margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #e5e7eb;
+  position: sticky;
+  top: 0;
+  background: white;
+  z-index: 10;
+
+  @media (max-width: 768px) {
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+  }
 `;
 
 const ModalTitle = styled.h2`
@@ -233,6 +266,30 @@ const Form = styled.form`
   display: flex;
   flex-direction: column;
   gap: 16px;
+  max-height: calc(100vh - 200px);
+  overflow-y: auto;
+  padding-right: 4px;
+
+  @media (max-width: 768px) {
+    gap: 12px;
+    max-height: calc(100vh - 160px);
+  }
+
+  @media (max-height: 600px) {
+    gap: 10px;
+    max-height: calc(100vh - 120px);
+  }
+`;
+
+const FormRow = styled.div`
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+
+  @media (max-width: 768px) {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
 `;
 
 const FormGroup = styled.div`
@@ -241,9 +298,15 @@ const FormGroup = styled.div`
 `;
 
 const Label = styled.label`
-  margin-bottom: 8px;
+  margin-bottom: 6px;
   font-weight: 500;
   color: #374151;
+  font-size: 14px;
+
+  @media (max-width: 768px) {
+    margin-bottom: 4px;
+    font-size: 13px;
+  }
 `;
 
 const Input = styled.input`
@@ -257,6 +320,11 @@ const Input = styled.input`
     border-color: #3498db;
     box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
   }
+
+  @media (max-width: 768px) {
+    padding: 10px;
+    font-size: 16px; /* Prevents zoom on iOS */
+  }
 `;
 
 const Textarea = styled.textarea`
@@ -265,12 +333,18 @@ const Textarea = styled.textarea`
   border-radius: 6px;
   font-size: 14px;
   resize: vertical;
-  min-height: 100px;
+  min-height: 80px;
 
   &:focus {
     outline: none;
     border-color: #3498db;
     box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+  }
+
+  @media (max-width: 768px) {
+    padding: 10px;
+    font-size: 16px; /* Prevents zoom on iOS */
+    min-height: 60px;
   }
 `;
 
@@ -286,6 +360,11 @@ const Select = styled.select`
     border-color: #3498db;
     box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
   }
+
+  @media (max-width: 768px) {
+    padding: 10px;
+    font-size: 16px; /* Prevents zoom on iOS */
+  }
 `;
 
 const ModalActions = styled.div`
@@ -293,6 +372,13 @@ const ModalActions = styled.div`
   justify-content: flex-end;
   gap: 12px;
   margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid #e5e7eb;
+
+  @media (max-width: 768px) {
+    flex-direction: column-reverse;
+    gap: 8px;
+  }
 `;
 
 const Button = styled.button`
@@ -374,15 +460,20 @@ const RemoveTag = styled.button`
 `;
 
 const MemberDropdown = styled.div`
-  max-height: 200px;
+  max-height: 150px;
   overflow-y: auto;
   border: 1px solid #d1d5db;
   border-radius: 4px;
   background: white;
   position: absolute;
   width: 100%;
-  z-index: 1000;
+  z-index: 1001;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  margin-top: 4px;
+
+  @media (max-height: 600px) {
+    max-height: 100px;
+  }
 `;
 
 const MemberOption = styled.div`
@@ -833,9 +924,7 @@ const Tasks = () => {
             <ModalHeader>
               <ModalTitle>{editingTask ? 'Edit Task' : 'Create New Task'}</ModalTitle>
               <CloseButton onClick={closeModal}>&times;</CloseButton>
-            </ModalHeader>
-
-            <Form onSubmit={handleSubmit}>
+            </ModalHeader>            <Form onSubmit={handleSubmit}>
               <FormGroup>
                 <Label htmlFor="task-name">Task Name</Label>
                 <Input
@@ -855,47 +944,64 @@ const Tasks = () => {
                 />
               </FormGroup>
 
-              <FormGroup>
-                <Label htmlFor="task-priority">Priority</Label>
-                <Select
-                  id="task-priority"
-                  value={formData.priority}
-                  onChange={(e) => handleFormChange('priority', e.target.value)}
-                >
-                  <option value="low">Low</option>
-                  <option value="medium">Medium</option>
-                  <option value="high">High</option>
-                  <option value="urgent">Urgent</option>
-                </Select>
-              </FormGroup>
+              <FormRow>
+                <FormGroup>
+                  <Label htmlFor="task-priority">Priority</Label>
+                  <Select
+                    id="task-priority"
+                    value={formData.priority}
+                    onChange={(e) => handleFormChange('priority', e.target.value)}
+                  >
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                    <option value="urgent">Urgent</option>
+                  </Select>
+                </FormGroup>
 
-              <FormGroup>
-                <Label htmlFor="task-status">Status</Label>
-                <Select
-                  id="task-status"
-                  value={formData.status}
-                  onChange={(e) => handleFormChange('status', e.target.value)}
-                >
-                  <option value="todo">To Do</option>
-                  <option value="in-progress">In Progress</option>
-                  <option value="completed">Completed</option>
-                  <option value="on-hold">On Hold</option>
-                </Select>
-              </FormGroup>              <FormGroup>
-                <Label htmlFor="task-project">Project *</Label>
-                <Select
-                  id="task-project"
-                  value={formData.projectId}
-                  onChange={(e) => handleFormChange('projectId', e.target.value)}
-                  required
-                >
-                  <option value="">Select a project</option>
-                  {projects.map(project => (
-                    <option key={project._id} value={project._id}>
-                      {project.name}
-                    </option>
-                  ))}
-                </Select>              </FormGroup>              {canAssignTasks && (
+                <FormGroup>
+                  <Label htmlFor="task-status">Status</Label>
+                  <Select
+                    id="task-status"
+                    value={formData.status}
+                    onChange={(e) => handleFormChange('status', e.target.value)}
+                  >
+                    <option value="todo">To Do</option>
+                    <option value="in-progress">In Progress</option>
+                    <option value="completed">Completed</option>
+                    <option value="on-hold">On Hold</option>
+                  </Select>
+                </FormGroup>
+              </FormRow>
+
+              <FormRow>
+                <FormGroup>
+                  <Label htmlFor="task-project">Project *</Label>
+                  <Select
+                    id="task-project"
+                    value={formData.projectId}
+                    onChange={(e) => handleFormChange('projectId', e.target.value)}
+                    required
+                  >
+                    <option value="">Select a project</option>
+                    {projects.map(project => (
+                      <option key={project._id} value={project._id}>
+                        {project.name}
+                      </option>
+                    ))}
+                  </Select>
+                </FormGroup>
+
+                <FormGroup>
+                  <Label htmlFor="task-due-date">Due Date</Label>
+                  <Input
+                    id="task-due-date"
+                    type="date"
+                    value={formData.dueDate}
+                    onChange={(e) => handleFormChange('dueDate', e.target.value)}
+                  />
+                </FormGroup>
+              </FormRow>              {canAssignTasks && (
                 <FormGroup style={{ position: 'relative' }}>
                   <Label htmlFor="task-assignees">Assignees</Label>
                   <MultiSelectContainer
@@ -947,15 +1053,7 @@ const Tasks = () => {
                 </FormGroup>
               )}
 
-              <FormGroup>
-                <Label htmlFor="task-due-date">Due Date</Label>
-                <Input
-                  id="task-due-date"
-                  type="date"
-                  value={formData.dueDate}
-                  onChange={(e) => handleFormChange('dueDate', e.target.value)}
-                />
-              </FormGroup>              <ModalActions>
+              <ModalActions>
                 <Button type="button" className="secondary" onClick={closeModal}>
                   Cancel
                 </Button>

@@ -16,17 +16,24 @@ export const NotificationProvider = ({ children }) => {
   const { currentUser } = useAuth();
   const [assignedTasksCount, setAssignedTasksCount] = useState(0);
   const [assignedTasks, setAssignedTasks] = useState([]);
-
-  const fetchAssignedTasks = async () => {
+  const [completedTasks, setCompletedTasks] = useState([]);  const fetchAssignedTasks = async () => {
     if (!currentUser?._id) return;
     
     try {
       const response = await axios.get(`/tasks?assignee=${currentUser._id}`);
+      
+      // Separate pending and completed tasks
       const pendingTasks = response.data.filter(task => 
         task.status !== 'completed' && task.status !== 'done' && task.status !== 'cancelled'
       );
+      
+      const completedTasksList = response.data.filter(task => 
+        task.status === 'completed' || task.status === 'done'
+      );
+      
       setAssignedTasks(pendingTasks);
       setAssignedTasksCount(pendingTasks.length);
+      setCompletedTasks(completedTasksList);
     } catch (error) {
       console.error('Error fetching assigned tasks:', error);
     }
@@ -41,10 +48,10 @@ export const NotificationProvider = ({ children }) => {
   const refreshAssignedTasks = () => {
     fetchAssignedTasks();
   };
-
   const value = {
     assignedTasksCount,
     assignedTasks,
+    completedTasks,
     refreshAssignedTasks
   };
 

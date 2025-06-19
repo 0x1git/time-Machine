@@ -13,7 +13,7 @@ import {
   LineElement
 } from 'chart.js';
 import { Bar, Doughnut, Line } from 'react-chartjs-2';
-import { FiClock, FiFolderPlus, FiTrendingUp, FiCalendar, FiClipboard } from 'react-icons/fi';
+import { FiClock, FiFolderPlus, FiTrendingUp, FiCalendar, FiClipboard, FiRefreshCw } from 'react-icons/fi';
 import axios from 'axios';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNotifications } from '../../contexts/NotificationContext';
@@ -112,6 +112,17 @@ const ChartsGrid = styled.div`
   }
 `;
 
+const TasksGrid = styled.div`
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  margin-bottom: 32px;
+
+  @media (max-width: 768px) {
+    grid-template-columns: 1fr;
+  }
+`;
+
 const ChartCard = styled.div`
   background: white;
   padding: 24px;
@@ -124,6 +135,26 @@ const ChartTitle = styled.h3`
   font-weight: 600;
   color: #2c3e50;
   margin-bottom: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+`;
+
+const RefreshButton = styled.button`
+  background: none;
+  border: none;
+  color: #6b7280;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  transition: all 0.2s ease;
+
+  &:hover {
+    color: #3498db;
+    background: #f1f5f9;
+  }
 `;
 
 const RecentActivity = styled.div`
@@ -297,9 +328,9 @@ const NoTasks = styled.div`
 
 const Dashboard = () => {
   const { currentUser } = useAuth();
-  const { assignedTasks, assignedTasksCount } = useNotifications();
+  const { assignedTasks, assignedTasksCount, completedTasks, refreshAssignedTasks } = useNotifications();
   const [dashboardData, setDashboardData] = useState(null);
-  const [loading, setLoading] = useState(true);  useEffect(() => {
+  const [loading, setLoading] = useState(true);useEffect(() => {
     if (currentUser) {
       fetchDashboardData();
     }
@@ -434,9 +465,7 @@ const Dashboard = () => {
               <StatLabel>Active Projects</StatLabel>
             </StatContent>
           </StatHeader>
-        </StatCard>
-
-        <StatCard color="#e74c3c">
+        </StatCard>        <StatCard color="#e74c3c">
           <StatHeader>
             <StatIcon color="#e74c3c">
               <FiClipboard size={24} />
@@ -447,14 +476,36 @@ const Dashboard = () => {
             </StatContent>
           </StatHeader>
         </StatCard>
+
+        <StatCard color="#28a745">
+          <StatHeader>
+            <StatIcon color="#28a745">
+              <FiClipboard size={24} />
+            </StatIcon>
+            <StatContent>
+              <StatValue>{completedTasks?.length || 0}</StatValue>
+              <StatLabel>Completed Tasks</StatLabel>
+            </StatContent>
+          </StatHeader>
+        </StatCard>
       </StatsGrid>      <ChartsGrid>
         <ChartCard>
           <ChartTitle>Daily Activity (Last 7 Days)</ChartTitle>
           <Bar data={dailyActivityData} options={chartOptions} />
         </ChartCard>
-        
+      </ChartsGrid>
+
+      <TasksGrid>
         <ChartCard>
-          <ChartTitle>My Assigned Tasks</ChartTitle>
+          <ChartTitle>
+            My Assigned Tasks
+            <RefreshButton 
+              onClick={refreshAssignedTasks}
+              title="Refresh assigned tasks"
+            >
+              <FiRefreshCw size={16} />
+            </RefreshButton>
+          </ChartTitle>
           {dashboardData?.assignedTasks?.length > 0 ? (
             <TaskList>
               {dashboardData.assignedTasks.slice(0, 5).map((task) => (
@@ -487,7 +538,52 @@ const Dashboard = () => {
             </NoTasks>
           )}
         </ChartCard>
-      </ChartsGrid>
+
+        <ChartCard>
+          <ChartTitle>
+            My Completed Tasks
+            <RefreshButton 
+              onClick={refreshAssignedTasks}
+              title="Refresh completed tasks"
+            >
+              <FiRefreshCw size={16} />
+            </RefreshButton>
+          </ChartTitle>
+          {completedTasks?.length > 0 ? (
+            <TaskList>
+              {completedTasks.slice(0, 5).map((task) => (
+                <TaskItem key={task._id}>
+                  <TaskHeader>
+                    <TaskTitle>{task.title}</TaskTitle>
+                    <TaskStatus status={task.status}>{task.status}</TaskStatus>
+                  </TaskHeader>                  <TaskMeta>
+                    Project: {task.project?.name || 'No project'}
+                    {task.dueDate && (
+                      <span> • Due: {formatDate(task.dueDate)}</span>
+                    )}
+                    {task.status === 'completed' && task.updatedAt && (
+                      <span> • Completed: {formatDate(task.updatedAt)}</span>
+                    )}
+                  </TaskMeta>
+                  {task.description && (
+                    <TaskDescription>{task.description}</TaskDescription>
+                  )}
+                </TaskItem>
+              ))}
+              {completedTasks.length > 5 && (
+                <ViewAllTasks>
+                  View all {completedTasks.length} completed tasks
+                </ViewAllTasks>
+              )}
+            </TaskList>
+          ) : (
+            <NoTasks>
+              <FiClipboard size={48} color="#cbd5e1" />
+              <p>No completed tasks yet</p>
+            </NoTasks>
+          )}
+        </ChartCard>
+      </TasksGrid>
 
       <RecentActivity>
         <ActivityHeader>

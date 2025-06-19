@@ -682,44 +682,43 @@ const Teams = () => {
               <TeamDescription>{team.description}</TeamDescription>
             )}
 
-            <MembersSection>
-              <SectionTitle>
+            <MembersSection>              <SectionTitle>
                 <FiUsers size={14} style={{ marginRight: 8 }} />
-                Members ({team.members?.length || 0})
-              </SectionTitle>
-              <MembersList>
-                {team.members?.map(member => (
-                  <MemberItem key={member.user._id}>                    <MemberInfo>
+                Members ({team.members?.filter(member => member.user && member.user._id).length || 0})
+              </SectionTitle><MembersList>
+                {team.members?.filter(member => member.user && member.user._id).map(member => (
+                  <MemberItem key={member.user._id}>
+                    <MemberInfo>
                       <Avatar>
-                        {getInitials(member.user.name)}
+                        {getInitials(member.user.name || 'Unknown User')}
                       </Avatar>
                       <MemberDetails>
-                        <MemberName>{member.user.name}</MemberName>
-                        <MemberEmail>{member.user.email}</MemberEmail>
+                        <MemberName>{member.user.name || 'Unknown User'}</MemberName>
+                        <MemberEmail>{member.user.email || 'No email'}</MemberEmail>
                       </MemberDetails>
-                    </MemberInfo>                    <MemberActions>
+                    </MemberInfo>
+                    <MemberActions>
                       <RoleBadge className={member.role}>
                         {member.role}
                       </RoleBadge>
-                      {canAssignTasks && (
+                      {canAssignTasks && member.user._id && (
                         <AssignTaskButton
                           onClick={() => handleAssignTask(member.user)}
-                          title={`Assign task to ${member.user.name}`}
+                          title={`Assign task to ${member.user.name || 'this user'}`}
                         >
                           <FiClipboard size={14} />
                         </AssignTaskButton>
                       )}
-                      {canRemoveMember(team, member) && (
+                      {canRemoveMember(team, member) && member.user._id && (
                         <RemoveButton
-                          onClick={() => handleRemoveMember(team._id, member.user._id, member.user.name)}
-                          title={`Remove ${member.user.name} from team`}
+                          onClick={() => handleRemoveMember(team._id, member.user._id, member.user.name || 'this user')}
+                          title={`Remove ${member.user.name || 'this user'} from team`}
                         >
                           <FiTrash2 size={14} />
                         </RemoveButton>
                       )}
                     </MemberActions>
-                  </MemberItem>
-                ))}
+                  </MemberItem>                )) || []}
               </MembersList>
             </MembersSection>
           </TeamCard>
@@ -821,7 +820,7 @@ const Teams = () => {
         <Modal>
           <ModalContent>
             <ModalHeader>
-              <ModalTitle>Invite Members to {selectedTeam.name}</ModalTitle>
+              <ModalTitle>Invite Members to {selectedTeam?.name || 'Team'}</ModalTitle>
               <CloseButton onClick={closeInviteModal}>
                 <FiX size={20} />
               </CloseButton>
