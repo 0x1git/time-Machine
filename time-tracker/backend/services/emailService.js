@@ -52,7 +52,7 @@ class EmailService {
     const acceptUrl = `${process.env.FRONTEND_URL}/accept-invitation/${invitationToken}`;
 
     const mailOptions = {
-      from: process.env.EMAIL_USER,
+      from: `"TimeTracker" <${process.env.EMAIL_USER}>`,
       to: email,
       subject: `You've been invited to join ${teamName}`,
       html: `
@@ -193,10 +193,9 @@ class EmailService {
       throw error;
     }
   }
-
   async sendWelcomeEmail(email, name, teamName) {
     const mailOptions = {
-      from: process.env.EMAIL_USER,
+      from: `"TimeTracker" <${process.env.EMAIL_USER}>`,
       to: email,
       subject: `Welcome to ${teamName}!`,
       html: `
@@ -303,7 +302,7 @@ class EmailService {
         : "To complete your login, please enter the verification code below:";
 
     const mailOptions = {
-      from: process.env.EMAIL_USER,
+      from: `"TimeTracker" <${process.env.EMAIL_USER}>`,
       to: email,
       subject,
       html: `

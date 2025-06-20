@@ -84,9 +84,17 @@ const userSchema = new mongoose.Schema(
     isActive: {
       type: Boolean,
       default: true,
-    },
-    lastLogin: {
+    },    lastLogin: {
       type: Date,
+    },
+    // Two-Factor Authentication
+    is2FAEnabled: {
+      type: Boolean,
+      default: false,
+    },
+    twoFactorSecret: {
+      type: String,
+      default: null,
     },
   },
   {

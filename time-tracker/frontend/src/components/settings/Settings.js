@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import styled from "styled-components";
 import {
   FiUser,
@@ -356,12 +356,14 @@ const OTPButtons = styled.div`
 const Settings = () => {
   const { currentUser, logout, updateProfile } = useAuth();
   const { isDarkMode, toggleDarkMode } = useTheme();
-  const navigate = useNavigate();
-  const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();  const [loading, setLoading] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
   const [showPasswordOTP, setShowPasswordOTP] = useState(false);
+  const [show2FAOTP, setShow2FAOTP] = useState(false);
+  const [twoFAAction, setTwoFAAction] = useState(""); // "enable" or "disable"
+  const [is2FAEnabled, setIs2FAEnabled] = useState(false);
   const [otpValue, setOtpValue] = useState("");
   const [otpError, setOtpError] = useState("");
   const [profileData, setProfileData] = useState({
@@ -372,13 +374,26 @@ const Settings = () => {
     currentPassword: "",
     newPassword: "",
     confirmPassword: "",
-  });
-  const [notifications, setNotifications] = useState({
+  });  const [notifications, setNotifications] = useState({
     emailNotifications: true,
     pushNotifications: false,
     weeklyReports: true,
     taskReminders: true,
   });
+
+  // Fetch 2FA status on component mount
+  useEffect(() => {
+    const fetch2FAStatus = async () => {
+      try {
+        const response = await axios.get("/auth/2fa-status");
+        setIs2FAEnabled(response.data.is2FAEnabled);
+      } catch (error) {
+        console.error("Failed to fetch 2FA status:", error);
+      }
+    };
+
+    fetch2FAStatus();
+  }, []);
 
   const handleProfileUpdate = async (e) => {
     e.preventDefault();
@@ -453,11 +468,64 @@ const Settings = () => {
       setLoading(false);
     }
   };
-
   const handlePasswordOTPCancel = () => {
     setShowPasswordOTP(false);
     setOtpValue("");
     setOtpError("");
+    setLoading(false);
+  };
+
+  const handle2FAToggle = async () => {
+    if (is2FAEnabled) {
+      // Disable 2FA - require OTP verification
+      setTwoFAAction("disable");
+      try {
+        await axios.post("/otp/send-login", { email: currentUser.email });
+        setShow2FAOTP(true);
+        toast.success("Verification code sent to your email");
+      } catch (error) {
+        toast.error("Failed to send verification code");
+      }
+    } else {
+      // Enable 2FA - direct enable
+      setLoading(true);
+      try {
+        const response = await axios.post("/auth/enable-2fa");
+        setIs2FAEnabled(true);
+        toast.success("Two-factor authentication enabled successfully");
+      } catch (error) {
+        toast.error(error.response?.data?.message || "Failed to enable 2FA");
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
+
+  const handle2FAOTPSubmit = async (enteredOtp) => {
+    setLoading(true);
+    try {
+      if (twoFAAction === "disable") {
+        const response = await axios.post("/auth/disable-2fa", {
+          otp: enteredOtp,
+        });
+        setIs2FAEnabled(false);
+        toast.success("Two-factor authentication disabled successfully");
+      }
+      setShow2FAOTP(false);
+      setOtpValue("");
+      setOtpError("");
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to update 2FA settings");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handle2FAOTPCancel = () => {
+    setShow2FAOTP(false);
+    setOtpValue("");
+    setOtpError("");
+    setTwoFAAction("");
     setLoading(false);
   };
   const handleNotificationToggle = (key) => {
@@ -490,7 +558,6 @@ const Settings = () => {
       setOtpError("");
     }
   };
-
   const handleOTPSubmit = async (e) => {
     e.preventDefault();
 
@@ -499,7 +566,11 @@ const Settings = () => {
       return;
     }
 
-    await handlePasswordOTPSubmit(otpValue);
+    if (show2FAOTP) {
+      await handle2FAOTPSubmit(otpValue);
+    } else {
+      await handlePasswordOTPSubmit(otpValue);
+    }
   };
 
   return (
@@ -610,14 +681,50 @@ const Settings = () => {
                   placeholder="Confirm new password"
                 />
               </FormGroup>
-            </FormGrid>
-
-            <ButtonGroup>
+            </FormGrid>            <ButtonGroup>
               <Button type="submit" className="primary" disabled={loading}>
                 {loading ? "Updating..." : "Change Password"}
               </Button>
             </ButtonGroup>
           </form>
+        </SectionContent>
+      </SettingsSection>
+
+      <SettingsSection>
+        <SectionHeader>
+          <SectionTitle>
+            <FiShield size={20} />
+            Two-Factor Authentication
+          </SectionTitle>
+        </SectionHeader>
+        <SectionContent>
+          <ToggleGroup>
+            <ToggleInfo>
+              <ToggleLabel>Two-Factor Authentication</ToggleLabel>
+              <ToggleDescription>
+                {is2FAEnabled 
+                  ? "Secure your account with an additional verification step during login"
+                  : "Add an extra layer of security to your account by enabling two-factor authentication"
+                }
+              </ToggleDescription>
+            </ToggleInfo>
+            <Toggle
+              checked={is2FAEnabled}
+              onClick={handle2FAToggle}
+              disabled={loading}
+            />
+          </ToggleGroup>
+          {is2FAEnabled && (
+            <div style={{ marginTop: "16px", padding: "16px", backgroundColor: "#f0f9ff", borderRadius: "8px", border: "1px solid #0ea5e9" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+                <FiShield size={16} color="#0ea5e9" />
+                <span style={{ fontWeight: "500", color: "#0369a1" }}>2FA Active</span>
+              </div>
+              <p style={{ fontSize: "14px", color: "#0369a1", margin: 0 }}>
+                Your account is protected with two-factor authentication. You'll be asked for a verification code when signing in.
+              </p>
+            </div>
+          )}
         </SectionContent>
       </SettingsSection>
 
@@ -845,6 +952,52 @@ const Settings = () => {
                     type="button"
                     className="secondary"
                     onClick={handlePasswordOTPCancel}
+                    disabled={loading}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="submit"
+                    className="primary"
+                    disabled={otpValue.length !== 6 || loading}
+                  >
+                    {loading ? "Verifying..." : "Verify OTP"}
+                  </Button>
+                </OTPButtons>
+              </form>
+            </OTPModal>          </ModalContent>
+        </Modal>
+      )}
+
+      {/* 2FA OTP Modal */}
+      {show2FAOTP && (
+        <Modal onClick={handle2FAOTPCancel}>
+          <ModalContent onClick={(e) => e.stopPropagation()}>
+            <OTPModal>
+              <OTPTitle>
+                {twoFAAction === "disable" ? "Disable" : "Enable"} Two-Factor Authentication
+              </OTPTitle>
+              <OTPDescription>
+                {twoFAAction === "disable" 
+                  ? "We've sent a verification code to your email. Please enter it below to disable 2FA."
+                  : "We've sent a verification code to your email. Please enter it below to enable 2FA."
+                }
+              </OTPDescription>
+              <form onSubmit={handleOTPSubmit}>
+                <OTPInput
+                  type="text"
+                  placeholder="Enter 6-digit OTP"
+                  value={otpValue}
+                  onChange={handleOTPChange}
+                  className={otpError ? "error" : ""}
+                  maxLength="6"
+                />
+                {otpError && <ErrorMessage>{otpError}</ErrorMessage>}
+                <OTPButtons>
+                  <Button
+                    type="button"
+                    className="secondary"
+                    onClick={handle2FAOTPCancel}
                     disabled={loading}
                   >
                     Cancel

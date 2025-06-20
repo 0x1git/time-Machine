@@ -129,11 +129,11 @@ const Login = () => {
   const [formData, setFormData] = useState({
     email: "",
     password: "",
-  });
-  const [loading, setLoading] = useState(false);
+  });  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [showOTPVerification, setShowOTPVerification] = useState(false);
   const [require2FA, setRequire2FA] = useState(false);
+  const [mandatory2FA, setMandatory2FA] = useState(false);
 
   const { login } = useAuth();
   const navigate = useNavigate();
@@ -145,34 +145,45 @@ const Login = () => {
       ...formData,
       [e.target.name]: e.target.value,
     });
-  };
-  const handleSubmit = async (e) => {
+  };  const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError("");
 
     try {
-      if (require2FA) {
-        // For 2FA: First validate credentials, then request OTP
-        const loginResponse = await axios.post("/auth/login", {
-          email: formData.email,
-          password: formData.password,
-          require2FA: true,
-        });
+      // Always try login first (backend will tell us if 2FA is needed)
+      const loginResponse = await axios.post("/auth/login", {
+        email: formData.email,
+        password: formData.password,
+        require2FA: require2FA,
+      });
 
-        if (loginResponse.data.require2FA) {
-          // Credentials are valid, now send OTP
-          await axios.post("/otp/send-login", { email: formData.email });
-          setShowOTPVerification(true);
-        } else {
-          // Credentials are valid but no 2FA needed
-          await login(formData.email, formData.password);
-          navigate(returnUrl || "/dashboard");
+      if (loginResponse.data.require2FA) {
+        // Backend says 2FA is needed, send OTP and show verification
+        await axios.post("/otp/send-login", { email: formData.email });
+        setShowOTPVerification(true);
+          // If it's mandatory 2FA, disable the checkbox and show message
+        if (loginResponse.data.mandatory2FA) {
+          setMandatory2FA(true);
+          setRequire2FA(true);
         }
       } else {
-        // Regular login without 2FA
-        await login(formData.email, formData.password);
+        // Login successful without 2FA needed
+        const { token, user, organization } = loginResponse.data;
+        
+        // Store auth data
+        localStorage.setItem("token", token);
+        localStorage.setItem("user", JSON.stringify(user));
+        if (organization) {
+          localStorage.setItem("organization", JSON.stringify(organization));
+        }
+
+        // Set axios default header
+        axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
+
+        // Navigate to dashboard
         navigate(returnUrl || "/dashboard");
+        window.location.reload(); // Refresh to update auth context
       }
     } catch (err) {
       const errorMsg = err.response?.data?.message || "Login failed";
@@ -183,6 +194,12 @@ const Login = () => {
         setError(
           "Please verify your email before logging in. Check your inbox for the verification code."
         );
+      }
+
+      // If backend requires 2FA but login failed, check if we need to show OTP
+      if (err.response?.data?.require2FA) {
+        await axios.post("/otp/send-login", { email: formData.email });
+        setShowOTPVerification(true);
       }
     } finally {
       setLoading(false);
@@ -265,17 +282,19 @@ const Login = () => {
               placeholder="Enter your password"
               required
             />
-          </InputGroup>
-
-          <CheckboxContainer>
+          </InputGroup>          <CheckboxContainer>
             <Checkbox
               type="checkbox"
               id="require2FA"
               checked={require2FA}
-              onChange={(e) => setRequire2FA(e.target.checked)}
+              onChange={(e) => !mandatory2FA && setRequire2FA(e.target.checked)}
+              disabled={mandatory2FA}
             />
             <CheckboxLabel htmlFor="require2FA">
-              Enable two-factor authentication
+              {mandatory2FA 
+                ? "Two-factor authentication (Required)" 
+                : "Enable two-factor authentication"
+              }
             </CheckboxLabel>
           </CheckboxContainer>
 

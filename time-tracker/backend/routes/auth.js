@@ -232,20 +232,24 @@ router.post(
             "Email not verified. Please verify your email before logging in.",
           requireEmailVerification: true,
         });
-      }
-
-      // Check password
+      }      // Check password
       const isMatch = await user.comparePassword(password);
       if (!isMatch) {
         return res.status(400).json({ message: "Invalid credentials" });
       }
 
-      // If 2FA is required but no OTP provided, ask for OTP
-      if (require2FA && !otp) {
+      // Check if user has 2FA enabled in their profile
+      const needs2FA = user.is2FAEnabled || require2FA;
+
+      // If 2FA is needed but no OTP provided, ask for OTP
+      if (needs2FA && !otp) {
         return res.status(200).json({
-          message: "Please provide the OTP sent to your email",
+          message: user.is2FAEnabled 
+            ? "Two-factor authentication is enabled on your account. Please provide the OTP sent to your email"
+            : "Please provide the OTP sent to your email",
           require2FA: true,
           email: email,
+          mandatory2FA: user.is2FAEnabled // Indicates if 2FA is mandatory for this user
         });
       }
 
@@ -428,9 +432,7 @@ router.post(
 
       // Clean up any existing password reset OTPs for this email
       const OTP = require('../models/OTP');
-      await OTP.deleteMany({ email: decoded.email, type: 'password_reset' });
-
-      res.json({
+      await OTP.deleteMany({ email: decoded.email, type: 'password_reset' });      res.json({
         message: "Password reset successfully"
       });
     } catch (error) {
@@ -439,5 +441,100 @@ router.post(
     }
   }
 );
+
+// @route   POST /api/auth/enable-2fa
+// @desc    Enable 2FA for user
+// @access  Private
+router.post("/enable-2fa", auth, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    if (user.is2FAEnabled) {
+      return res.status(400).json({ message: "2FA is already enabled" });
+    }
+
+    // Generate a secret for this user (simple timestamp-based for this demo)
+    const secret = `2FA_${user._id}_${Date.now()}`;
+    
+    user.twoFactorSecret = secret;
+    user.is2FAEnabled = true;
+    await user.save();
+
+    res.json({
+      message: "2FA enabled successfully",
+      is2FAEnabled: true
+    });
+  } catch (error) {
+    console.error('Enable 2FA error:', error);
+    res.status(500).json({ message: "Server error occurred" });
+  }
+});
+
+// @route   POST /api/auth/disable-2fa
+// @desc    Disable 2FA for user (requires OTP verification)
+// @access  Private
+router.post("/disable-2fa", [
+  auth,
+  body("otp").notEmpty().withMessage("OTP is required")
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { otp } = req.body;
+    const user = await User.findById(req.user.id);
+    
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    if (!user.is2FAEnabled) {
+      return res.status(400).json({ message: "2FA is not enabled" });
+    }
+
+    // Verify OTP
+    const isValidOTP = await verifyOTPFromDB(user.email, otp, "login_2fa");
+    if (!isValidOTP) {
+      return res.status(400).json({ message: "Invalid OTP code" });
+    }
+
+    // Disable 2FA
+    user.is2FAEnabled = false;
+    user.twoFactorSecret = null;
+    await user.save();
+
+    res.json({
+      message: "2FA disabled successfully",
+      is2FAEnabled: false
+    });
+  } catch (error) {
+    console.error('Disable 2FA error:', error);
+    res.status(500).json({ message: "Server error occurred" });
+  }
+});
+
+// @route   GET /api/auth/2fa-status
+// @desc    Get user's 2FA status
+// @access  Private
+router.get("/2fa-status", auth, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    res.json({
+      is2FAEnabled: user.is2FAEnabled
+    });
+  } catch (error) {
+    console.error('Get 2FA status error:', error);
+    res.status(500).json({ message: "Server error occurred" });
+  }
+});
 
 module.exports = router;
