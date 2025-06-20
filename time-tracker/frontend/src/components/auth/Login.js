@@ -291,7 +291,12 @@ const Login = () => {
               "Sign In"
             )}
           </Button>
-        </Form>{" "}
+        </Form>
+
+        <LinkText style={{ textAlign: "center", marginTop: "1rem" }}>
+          <Link to="/forgot-password">Forgot your password?</Link>
+        </LinkText>
+
         <LinkText>
           Don't have an account?{" "}
           <Link

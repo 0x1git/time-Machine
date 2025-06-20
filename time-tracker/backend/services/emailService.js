@@ -419,6 +419,75 @@ class EmailService {
   async sendLoginOTP(email, otp, userName = null) {
     return this.sendOTPEmail(email, otp, "login_2fa", userName);
   }
+
+  async sendPasswordResetOTP(email, userName, otp) {
+    if (!this.transporter) {
+      console.log(
+        `📧 Email service not configured - password reset OTP for ${email}: ${otp}`
+      );
+      return false;
+    }
+
+    try {
+      const mailOptions = {
+        from: `"TimeTracker" <${process.env.EMAIL_USER}>`,
+        to: email,
+        subject: "Password Reset - TimeTracker",
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f9f9f9;">
+            <div style="background-color: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+              <div style="text-align: center; margin-bottom: 30px;">
+                <h1 style="color: #2c3e50; margin: 0; font-size: 28px;">🔒 Password Reset</h1>
+              </div>
+              
+              <div style="margin-bottom: 25px;">
+                <p style="color: #333; font-size: 16px; line-height: 1.6; margin: 0;">
+                  Hello ${userName || 'User'},
+                </p>
+              </div>
+              
+              <div style="margin-bottom: 30px;">
+                <p style="color: #333; font-size: 16px; line-height: 1.6; margin: 0 0 15px 0;">
+                  We received a request to reset your password for your TimeTracker account. Use the following verification code:
+                </p>
+              </div>
+              
+              <div style="text-align: center; margin: 30px 0;">
+                <div style="display: inline-block; background-color: #f8f9fa; border: 2px dashed #3498db; border-radius: 8px; padding: 20px 30px;">
+                  <span style="font-size: 32px; font-weight: bold; color: #2c3e50; letter-spacing: 3px;">${otp}</span>
+                </div>
+              </div>
+              
+              <div style="margin-bottom: 25px;">
+                <p style="color: #666; font-size: 14px; line-height: 1.6; margin: 0;">
+                  ⏰ This code will expire in <strong>15 minutes</strong> for security reasons.
+                </p>
+              </div>
+              
+              <div style="margin-bottom: 25px;">
+                <p style="color: #666; font-size: 14px; line-height: 1.6; margin: 0;">
+                  If you didn't request a password reset, please ignore this email or contact support if you have concerns.
+                </p>
+              </div>
+              
+              <div style="border-top: 1px solid #eee; padding-top: 20px; margin-top: 30px;">
+                <p style="color: #999; font-size: 12px; text-align: center; margin: 0;">
+                  This email was sent from TimeTracker. Please do not reply to this email.
+                </p>
+              </div>
+            </div>
+          </div>
+        `,
+      };
+
+      await this.transporter.sendMail(mailOptions);
+      console.log(`📧 Password reset OTP sent to ${email}`);
+      return true;
+    } catch (error) {
+      console.error("Failed to send password reset OTP:", error);
+      throw error;
+    }
+  }
 }
 
 module.exports = new EmailService();

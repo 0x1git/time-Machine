@@ -9,6 +9,7 @@ import { NotificationProvider } from './contexts/NotificationContext';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 import Login from './components/auth/Login';
 import Register from './components/auth/Register';
+import ForgotPassword from './components/auth/ForgotPassword';
 import Dashboard from './components/dashboard/Dashboard';
 import Projects from './components/projects/Projects';
 import Tasks from './components/tasks/Tasks';
@@ -42,6 +43,7 @@ function App() {  return (
             <Routes>              {/* Public Routes */}
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
+              <Route path="/forgot-password" element={<ForgotPassword />} />
               <Route path="/accept-invitation/:token" element={<AcceptInvitation />} />
               <Route path="/kiosk" element={<Kiosk />} />
               
