@@ -425,9 +425,7 @@ const Settings = () => {
     if (!passwordData.currentPassword) {
       toast.error("Current password is required");
       return;
-    }
-
-    setLoading(true);
+    }    setLoading(true);
     try {
       // Step 1: Send OTP for password change verification
       await axios.post("/otp/send-login", {
@@ -437,7 +435,17 @@ const Settings = () => {
       setShowPasswordOTP(true);
       toast.success("Verification code sent to your email");
     } catch (error) {
-      toast.error("Failed to send verification code");
+      if (error.response?.status === 429) {
+        // Handle rate limiting
+        const errorData = error.response.data;
+        if (errorData.rateLimited) {
+          toast.error(`Rate limited! Please wait ${errorData.remainingTimeMinutes} minutes before trying again.`);
+        } else {
+          toast.error(errorData.message || "Too many requests. Please try again later.");
+        }
+      } else {
+        toast.error(error.response?.data?.message || "Failed to send verification code");
+      }
     } finally {
       setLoading(false);
     }
@@ -474,7 +482,6 @@ const Settings = () => {
     setOtpError("");
     setLoading(false);
   };
-
   const handle2FAToggle = async () => {
     if (is2FAEnabled) {
       // Disable 2FA - require OTP verification
@@ -484,7 +491,17 @@ const Settings = () => {
         setShow2FAOTP(true);
         toast.success("Verification code sent to your email");
       } catch (error) {
-        toast.error("Failed to send verification code");
+        if (error.response?.status === 429) {
+          // Handle rate limiting
+          const errorData = error.response.data;
+          if (errorData.rateLimited) {
+            toast.error(`Rate limited! Please wait ${errorData.remainingTimeMinutes} minutes before trying again.`);
+          } else {
+            toast.error(errorData.message || "Too many requests. Please try again later.");
+          }
+        } else {
+          toast.error(error.response?.data?.message || "Failed to send verification code");
+        }
       }
     } else {
       // Enable 2FA - direct enable

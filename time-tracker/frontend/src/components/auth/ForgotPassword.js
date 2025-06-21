@@ -136,6 +136,27 @@ const LinkText = styled.p`
   }
 `;
 
+const RateLimitInfo = styled.div`
+  background: #fef3cd;
+  color: #92400e;
+  padding: 0.75rem;
+  border-radius: 8px;
+  border: 1px solid #fde68a;
+  font-size: 0.875rem;
+  text-align: center;
+`;
+
+const RateLimitedWarning = styled.div`
+  background: #fef2f2;
+  color: #dc2626;
+  padding: 0.75rem;
+  border-radius: 8px;
+  border: 1px solid #fecaca;
+  font-size: 0.875rem;
+  text-align: center;
+  margin-bottom: 1rem;
+`;
+
 const StepIndicator = styled.div`
   display: flex;
   justify-content: center;
@@ -168,7 +189,7 @@ const ForgotPassword = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-
+  const [rateLimitInfo, setRateLimitInfo] = useState(null);
   const handleEmailSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -176,10 +197,26 @@ const ForgotPassword = () => {
 
     try {
       const response = await axios.post('/auth/forgot-password', { email });
+      
+      // Handle rate limit info
+      if (response.data.rateLimitInfo) {
+        setRateLimitInfo(response.data.rateLimitInfo);
+      }
+      
       setSuccess('Password reset code sent to your email!');
       setStep(2);
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to send reset code');
+      if (err.response?.status === 429) {
+        // Rate limited
+        const rateLimitData = err.response.data;
+        setError(rateLimitData.message);
+        setRateLimitInfo({
+          rateLimited: true,
+          remainingTimeMinutes: rateLimitData.remainingTimeMinutes
+        });
+      } else {
+        setError(err.response?.data?.message || 'Failed to send reset code');
+      }
     } finally {
       setLoading(false);
     }
@@ -250,13 +287,25 @@ const ForgotPassword = () => {
                   placeholder="Enter your email"
                   required
                 />
-              </InputGroup>
-              
+              </InputGroup>              
               {error && <ErrorMessage>{error}</ErrorMessage>}
               {success && <SuccessMessage>{success}</SuccessMessage>}
               
-              <Button type="submit" disabled={loading}>
-                {loading ? 'Sending...' : 'Send Reset Code'}
+              {rateLimitInfo && rateLimitInfo.rateLimited && (
+                <RateLimitedWarning>
+                  ⚠️ Rate Limited! You have exceeded the maximum number of password reset requests. 
+                  Please wait {rateLimitInfo.remainingTimeMinutes} more minute(s) before trying again.
+                </RateLimitedWarning>
+              )}
+              
+              {rateLimitInfo && !rateLimitInfo.rateLimited && rateLimitInfo.remainingRequests !== undefined && (
+                <RateLimitInfo>
+                  📊 You have {rateLimitInfo.remainingRequests} remaining password reset requests out of 5.
+                </RateLimitInfo>
+              )}
+              
+              <Button type="submit" disabled={loading || (rateLimitInfo && rateLimitInfo.rateLimited)}>
+                {loading ? 'Sending...' : (rateLimitInfo && rateLimitInfo.rateLimited) ? 'Rate Limited' : 'Send Reset Code'}
               </Button>
             </Form>
           </>

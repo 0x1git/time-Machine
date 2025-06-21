@@ -10,10 +10,71 @@ const emailService = require("../services/emailService");
 
 const router = express.Router();
 
+// Rate limiting for password reset requests
+const passwordResetRateLimit = {};
+
+const checkPasswordResetRateLimit = (req, res, next) => {
+  const { email } = req.body;
+  const now = Date.now();
+  const shortWindowMs = 15 * 60 * 1000; // 15 minutes for tracking requests
+  const longWindowMs = 60 * 60 * 1000; // 1 hour for rate limiting
+  const maxRequests = 5; // Max 5 requests before rate limiting
+  
+  if (!passwordResetRateLimit[email]) {
+    passwordResetRateLimit[email] = {
+      requests: [],
+      blockedUntil: null
+    };
+  }  const userLimits = passwordResetRateLimit[email];
+
+  // Check if user is currently blocked
+  if (userLimits.blockedUntil && now < userLimits.blockedUntil) {
+    const remainingTime = Math.ceil((userLimits.blockedUntil - now) / 1000 / 60); // minutes
+    return res.status(429).json({
+      message: `Too many password reset requests. You are rate limited for ${remainingTime} more minute(s). Please try again later.`,
+      rateLimited: true,
+      remainingTimeMinutes: remainingTime,
+      blockedUntil: userLimits.blockedUntil
+    });
+  }
+
+  // Clean old requests (older than short window)
+  userLimits.requests = userLimits.requests.filter(
+    (time) => now - time < shortWindowMs
+  );  // Add current request first
+  userLimits.requests.push(now);
+
+  // Check if user has exceeded the limit AFTER adding the current request
+  if (userLimits.requests.length > maxRequests) {
+    // Remove the current request since we're blocking it
+    userLimits.requests.pop();
+    
+    // Block user for 1 hour
+    userLimits.blockedUntil = now + longWindowMs;
+    const remainingTime = Math.ceil(longWindowMs / 1000 / 60); // 60 minutes
+    
+    return res.status(429).json({
+      message: `You have exceeded the maximum number of password reset requests (${maxRequests}). You are now rate limited for ${remainingTime} minutes. Please try again later.`,
+      rateLimited: true,
+      remainingTimeMinutes: remainingTime,
+      blockedUntil: userLimits.blockedUntil
+    });
+  }
+  // Add info about remaining requests
+  const remainingRequests = maxRequests - userLimits.requests.length;
+  req.rateLimitInfo = {
+    remainingRequests,
+    maxRequests
+  };
+  
+  next();
+};
+
 // Generate JWT token
-const generateToken = (id) => {
+const generateToken = (id, rememberMe = false) => {
+  const expiresIn = rememberMe ? "7d" : "1d"; // 7 days if remember me, 1 day otherwise
   return jwt.sign({ id }, process.env.JWT_SECRET, {
-    expiresIn: process.env.JWT_EXPIRE,
+    expiresIn: expiresIn,
   });
 };
 
@@ -199,8 +260,7 @@ router.post(
 // @route   POST /api/auth/login
 // @desc    Authenticate user & get token (with optional 2FA)
 // @access  Public
-router.post(
-  "/login",
+router.post(  "/login",
   [
     body("email").isEmail().withMessage("Please include a valid email"),
     body("password").exists().withMessage("Password is required"),
@@ -208,7 +268,7 @@ router.post(
       .optional()
       .isLength({ min: 6, max: 6 })
       .withMessage("OTP must be 6 digits"),
-    body("require2FA").optional().isBoolean(),
+    body("rememberMe").optional().isBoolean(),
   ],
   async (req, res) => {
     try {
@@ -217,7 +277,7 @@ router.post(
         return res.status(400).json({ errors: errors.array() });
       }
 
-      const { email, password, otp, require2FA } = req.body;
+      const { email, password, otp, rememberMe } = req.body;
 
       // Check for user
       const user = await User.findOne({ email }).populate("organization");
@@ -236,20 +296,16 @@ router.post(
       const isMatch = await user.comparePassword(password);
       if (!isMatch) {
         return res.status(400).json({ message: "Invalid credentials" });
-      }
-
-      // Check if user has 2FA enabled in their profile
-      const needs2FA = user.is2FAEnabled || require2FA;
+      }      // Check if user has 2FA enabled in their profile
+      const needs2FA = user.is2FAEnabled;
 
       // If 2FA is needed but no OTP provided, ask for OTP
       if (needs2FA && !otp) {
         return res.status(200).json({
-          message: user.is2FAEnabled 
-            ? "Two-factor authentication is enabled on your account. Please provide the OTP sent to your email"
-            : "Please provide the OTP sent to your email",
+          message: "Two-factor authentication is enabled on your account. Please provide the OTP sent to your email",
           require2FA: true,
           email: email,
-          mandatory2FA: user.is2FAEnabled // Indicates if 2FA is mandatory for this user
+          mandatory2FA: true // 2FA is always mandatory if enabled in profile
         });
       }
 
@@ -261,14 +317,12 @@ router.post(
             message: "Login verification failed: " + otpVerification.message,
           });
         }
-      }
-
-      // Update last login
+      }      // Update last login
       user.lastLogin = new Date();
       await user.save();
 
       // Generate token
-      const token = generateToken(user._id);
+      const token = generateToken(user._id, rememberMe);
 
       res.json({
         token,
@@ -315,6 +369,7 @@ router.get("/me", auth, async (req, res) => {
 router.post(
   "/forgot-password",
   [body("email").isEmail().withMessage("Please include a valid email")],
+  checkPasswordResetRateLimit,
   async (req, res) => {
     try {
       const errors = validationResult(req);
@@ -330,14 +385,13 @@ router.post(
         return res.status(404).json({ message: "User not found with this email address" });
       }      // Generate OTP for password reset
       const { createOTP } = require('../utils/otpUtils');
-      const otpResult = await createOTP(email, 'password_reset');
-
-      // Send password reset email
+      const otpResult = await createOTP(email, 'password_reset');      // Send password reset email
       await emailService.sendPasswordResetOTP(email, user.name, otpResult.otp);
 
       res.json({
         message: "Password reset code sent to your email address",
-        email: email
+        email: email,
+        rateLimitInfo: req.rateLimitInfo // Include rate limit info
       });
     } catch (error) {
       console.error('Forgot password error:', error);
@@ -537,4 +591,4 @@ router.get("/2fa-status", auth, async (req, res) => {
   }
 });
 
-module.exports = router;
+module.exports = { router, generateToken };

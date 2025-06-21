@@ -132,7 +132,7 @@ const Login = () => {
   });  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [showOTPVerification, setShowOTPVerification] = useState(false);
-  const [require2FA, setRequire2FA] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
   const [mandatory2FA, setMandatory2FA] = useState(false);
 
   const { login } = useAuth();
@@ -150,22 +150,29 @@ const Login = () => {
     setLoading(true);
     setError("");
 
-    try {
-      // Always try login first (backend will tell us if 2FA is needed)
+    try {      // Always try login first (backend will tell us if 2FA is needed)
       const loginResponse = await axios.post("/auth/login", {
         email: formData.email,
         password: formData.password,
-        require2FA: require2FA,
-      });
-
-      if (loginResponse.data.require2FA) {
+        rememberMe: rememberMe,
+      });      if (loginResponse.data.require2FA) {
         // Backend says 2FA is needed, send OTP and show verification
-        await axios.post("/otp/send-login", { email: formData.email });
-        setShowOTPVerification(true);
-          // If it's mandatory 2FA, disable the checkbox and show message
-        if (loginResponse.data.mandatory2FA) {
-          setMandatory2FA(true);
-          setRequire2FA(true);
+        try {
+          await axios.post("/otp/send-login", { email: formData.email });
+          setShowOTPVerification(true);
+          
+          // If it's mandatory 2FA, show the OTP verification
+          if (loginResponse.data.mandatory2FA) {
+            setMandatory2FA(true);
+          }
+        } catch (otpError) {
+          // Handle rate limiting for OTP requests
+          if (otpError.response?.data?.rateLimited) {
+            setError(`Rate limited! Please wait ${otpError.response.data.remainingTimeMinutes} minutes before requesting a new code.`);
+          } else {
+            setError(otpError.response?.data?.message || "Failed to send verification code");
+          }
+          return; // Don't show OTP verification if OTP request failed
         }
       } else {
         // Login successful without 2FA needed
@@ -194,12 +201,24 @@ const Login = () => {
         setError(
           "Please verify your email before logging in. Check your inbox for the verification code."
         );
-      }
-
-      // If backend requires 2FA but login failed, check if we need to show OTP
+      }      // If backend requires 2FA but login failed, check if we need to show OTP
       if (err.response?.data?.require2FA) {
-        await axios.post("/otp/send-login", { email: formData.email });
-        setShowOTPVerification(true);
+        try {
+          await axios.post("/otp/send-login", { email: formData.email });
+          setShowOTPVerification(true);
+        } catch (otpError) {
+          // Handle rate limiting for OTP requests
+          if (otpError.response?.status === 429) {
+            const errorData = otpError.response.data;
+            if (errorData.rateLimited) {
+              setError(`Rate limited! Please wait ${errorData.remainingTimeMinutes} minutes before requesting a new code.`);
+            } else {
+              setError(errorData.message || "Too many requests. Please try again later.");
+            }
+          } else {
+            setError(otpError.response?.data?.message || "Failed to send verification code");
+          }
+        }
       }
     } finally {
       setLoading(false);
@@ -285,16 +304,12 @@ const Login = () => {
           </InputGroup>          <CheckboxContainer>
             <Checkbox
               type="checkbox"
-              id="require2FA"
-              checked={require2FA}
-              onChange={(e) => !mandatory2FA && setRequire2FA(e.target.checked)}
-              disabled={mandatory2FA}
+              id="rememberMe"
+              checked={rememberMe}
+              onChange={(e) => setRememberMe(e.target.checked)}
             />
-            <CheckboxLabel htmlFor="require2FA">
-              {mandatory2FA 
-                ? "Two-factor authentication (Required)" 
-                : "Enable two-factor authentication"
-              }
+            <CheckboxLabel htmlFor="rememberMe">
+              Remember me (Keep me logged in for 7 days)
             </CheckboxLabel>
           </CheckboxContainer>
 

@@ -95,6 +95,38 @@ const ErrorMessage = styled.div`
   margin-bottom: 1rem;
 `;
 
+const RateLimitInfo = styled.div`
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  padding: 12px;
+  margin: 1rem 0;
+  text-align: center;
+`;
+
+const RateLimitTitle = styled.div`
+  color: #dc2626;
+  font-weight: 600;
+  font-size: 14px;
+  margin-bottom: 4px;
+`;
+
+const RateLimitText = styled.div`
+  color: #7f1d1d;
+  font-size: 13px;
+`;
+
+const RequestsInfo = styled.div`
+  background: #f0f9ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 6px;
+  padding: 8px;
+  margin: 1rem 0;
+  text-align: center;
+  font-size: 13px;
+  color: #1e40af;
+`;
+
 const Timer = styled.div`
   color: #6b7280;
   font-size: 14px;
@@ -108,12 +140,14 @@ const OTPVerification = ({
   onCancel,
   title,
   description,
-}) => {
-  const [otp, setOtp] = useState("");
+}) => {  const [otp, setOtp] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [resendCooldown, setResendCooldown] = useState(0);
   const [timeLeft, setTimeLeft] = useState(600); // 10 minutes
+  const [rateLimited, setRateLimited] = useState(false);
+  const [rateLimitTime, setRateLimitTime] = useState(0);
+  const [remainingRequests, setRemainingRequests] = useState(5);
 
   useEffect(() => {
     if (timeLeft > 0) {
@@ -131,6 +165,20 @@ const OTPVerification = ({
       return () => clearTimeout(timer);
     }
   }, [resendCooldown]);
+
+  // Rate limit countdown effect
+  useEffect(() => {
+    if (rateLimitTime > 0) {
+      const timer = setTimeout(
+        () => setRateLimitTime(rateLimitTime - 1),
+        60000 // 1 minute
+      );
+      return () => clearTimeout(timer);
+    } else if (rateLimited && rateLimitTime === 0) {
+      setRateLimited(false);
+      setRemainingRequests(5); // Reset remaining requests
+    }
+  }, [rateLimitTime, rateLimited]);
 
   const formatTime = (seconds) => {
     const mins = Math.floor(seconds / 60);
@@ -179,9 +227,8 @@ const OTPVerification = ({
       setLoading(false);
     }
   };
-
   const handleResend = async () => {
-    if (resendCooldown > 0) return;
+    if (resendCooldown > 0 || rateLimited) return;
 
     setLoading(true);
     setError("");
@@ -197,12 +244,26 @@ const OTPVerification = ({
         setResendCooldown(60); // 1 minute cooldown
         setTimeLeft(600); // Reset timer to 10 minutes
         setOtp("");
+        
+        // Update rate limit info
+        if (response.data.rateLimitInfo) {
+          setRemainingRequests(response.data.rateLimitInfo.remainingRequests);
+        }
       }
     } catch (err) {
-      const errorMessage =
-        err.response?.data?.message || "Failed to resend code";
+      const errorData = err.response?.data;
+      const errorMessage = errorData?.message || "Failed to resend code";
+      
+      // Handle rate limiting
+      if (errorData?.rateLimited) {
+        setRateLimited(true);
+        setRateLimitTime(errorData.remainingTimeMinutes);
+        toast.error(`Rate limited! Please wait ${errorData.remainingTimeMinutes} minutes before trying again.`);
+      } else {
+        toast.error(errorMessage);
+      }
+      
       setError(errorMessage);
-      toast.error(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -232,9 +293,24 @@ const OTPVerification = ({
           maxLength={6}
           className={error ? "error" : ""}
           autoFocus
-        />
+        />        {error && <ErrorMessage>{error}</ErrorMessage>}
 
-        {error && <ErrorMessage>{error}</ErrorMessage>}
+        {rateLimited && (
+          <RateLimitInfo>
+            <RateLimitTitle>⚠️ Rate Limited</RateLimitTitle>
+            <RateLimitText>
+              You have exceeded the maximum number of OTP requests (5).
+              <br />
+              Please wait {rateLimitTime} more minute(s) before trying again.
+            </RateLimitText>
+          </RateLimitInfo>
+        )}
+
+        {!rateLimited && remainingRequests < 5 && (
+          <RequestsInfo>
+            📊 Remaining OTP requests: {remainingRequests}/5
+          </RequestsInfo>
+        )}
 
         {timeLeft > 0 && <Timer>Code expires in {formatTime(timeLeft)}</Timer>}
 
@@ -243,12 +319,16 @@ const OTPVerification = ({
         </Button>
       </form>
 
-      <div>
-        <ResendButton
+      <div>        <ResendButton
           onClick={handleResend}
-          disabled={loading || resendCooldown > 0}
+          disabled={loading || resendCooldown > 0 || rateLimited}
         >
-          {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : "Resend Code"}
+          {rateLimited 
+            ? `Rate limited (${rateLimitTime}m remaining)`
+            : resendCooldown > 0 
+            ? `Resend in ${resendCooldown}s` 
+            : "Resend Code"
+          }
         </ResendButton>
       </div>
 

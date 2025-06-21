@@ -284,11 +284,20 @@ const Register = () => {
       } else {
         // This shouldn't happen as the form should be hidden when email is verified
         setError("Email already verified. Please proceed with registration.");
+      }    } catch (err) {
+      if (err.response?.status === 429) {
+        // Handle rate limiting
+        const errorData = err.response.data;
+        if (errorData.rateLimited) {
+          setError(`Rate limited! Please wait ${errorData.remainingTimeMinutes} minutes before requesting a new verification code.`);
+        } else {
+          setError(errorData.message || "Too many requests. Please try again later.");
+        }
+      } else {
+        setError(
+          err.response?.data?.message || "Failed to send verification email"
+        );
       }
-    } catch (err) {
-      setError(
-        err.response?.data?.message || "Failed to send verification email"
-      );
     } finally {
       setLoading(false);
     }

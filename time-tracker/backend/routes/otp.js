@@ -11,32 +11,69 @@ const { auth } = require("../middleware/auth");
 
 const router = express.Router();
 
-// Rate limiting middleware for OTP routes
+// Advanced rate limiting middleware for OTP routes
 const otpRateLimit = {};
 
-const checkRateLimit = (req, res, next) => {
+const checkAdvancedRateLimit = (req, res, next) => {
   const { email } = req.body;
   const now = Date.now();
-  const windowMs = 60 * 1000; // 1 minute
-  const maxRequests = 2; // Max 2 requests per minute per email
-
+  const shortWindowMs = 15 * 60 * 1000; // 15 minutes for tracking requests
+  const longWindowMs = 60 * 60 * 1000; // 1 hour for rate limiting
+  const maxRequests = 5; // Max 5 requests before rate limiting
+  
   if (!otpRateLimit[email]) {
-    otpRateLimit[email] = [];
+    otpRateLimit[email] = {
+      requests: [],
+      blockedUntil: null
+    };
   }
 
-  // Clean old requests
-  otpRateLimit[email] = otpRateLimit[email].filter(
-    (time) => now - time < windowMs
-  );
+  const userLimits = otpRateLimit[email];
 
-  if (otpRateLimit[email].length >= maxRequests) {
+  // Check if user is currently blocked
+  if (userLimits.blockedUntil && now < userLimits.blockedUntil) {
+    const remainingTime = Math.ceil((userLimits.blockedUntil - now) / 1000 / 60); // minutes
     return res.status(429).json({
       success: false,
-      message: "Too many OTP requests. Please wait before trying again.",
+      message: `Too many OTP requests. You are rate limited for ${remainingTime} more minute(s). Please try again later.`,
+      rateLimited: true,
+      remainingTimeMinutes: remainingTime,
+      blockedUntil: userLimits.blockedUntil
     });
   }
 
-  otpRateLimit[email].push(now);
+  // Clean old requests (older than short window)
+  userLimits.requests = userLimits.requests.filter(
+    (time) => now - time < shortWindowMs
+  );
+  // Add current request first
+  userLimits.requests.push(now);
+
+  // Check if user has exceeded the limit AFTER adding the current request
+  if (userLimits.requests.length > maxRequests) {
+    // Remove the current request since we're blocking it
+    userLimits.requests.pop();
+    
+    // Block user for 1 hour
+    userLimits.blockedUntil = now + longWindowMs;
+    const remainingTime = Math.ceil(longWindowMs / 1000 / 60); // 60 minutes
+    
+    return res.status(429).json({
+      success: false,
+      message: `You have exceeded the maximum number of OTP requests (${maxRequests}). You are now rate limited for ${remainingTime} minutes. Please try again later.`,
+      rateLimited: true,
+      remainingTimeMinutes: remainingTime,
+      blockedUntil: userLimits.blockedUntil
+    });
+  }
+  
+  // Add info about remaining requests
+  const remainingRequests = maxRequests - userLimits.requests.length;
+  req.rateLimitInfo = {
+    remainingRequests,
+    maxRequests
+  };
+  
   next();
 };
 
@@ -46,7 +83,7 @@ const checkRateLimit = (req, res, next) => {
 router.post(
   "/send-verification",
   [
-    checkRateLimit,
+    checkAdvancedRateLimit,
     body("email").isEmail().withMessage("Please provide a valid email"),
     body("name").optional().trim(),
   ],
@@ -81,9 +118,7 @@ router.post(
       }
 
       // Create OTP
-      const { otp, otpRecord } = await createOTP(email, "email_verification");
-
-      // Send OTP email
+      const { otp, otpRecord } = await createOTP(email, "email_verification");      // Send OTP email
       try {
         await emailService.sendEmailVerificationOTP(email, otp, name);
       } catch (emailError) {
@@ -95,6 +130,7 @@ router.post(
         success: true,
         message: "Verification code sent to your email",
         expiresAt: otpRecord.expiresAt,
+        rateLimitInfo: req.rateLimitInfo
       });
     } catch (error) {
       console.error("Send verification OTP error:", error);
@@ -163,7 +199,7 @@ router.post(
 router.post(
   "/send-login",
   [
-    checkRateLimit,
+    checkAdvancedRateLimit,
     body("email").isEmail().withMessage("Please provide a valid email"),
   ],
   async (req, res) => {
@@ -206,12 +242,11 @@ router.post(
       } catch (emailError) {
         console.error("Failed to send login OTP email:", emailError);
         // Continue even if email fails
-      }
-
-      res.status(200).json({
+      }      res.status(200).json({
         success: true,
         message: "Verification code sent to your email",
         expiresAt: otpRecord.expiresAt,
+        rateLimitInfo: req.rateLimitInfo
       });
     } catch (error) {
       console.error("Send login OTP error:", error);
@@ -267,13 +302,9 @@ router.post(
 
       // Update last login
       user.lastLogin = new Date();
-      await user.save();
-
-      // Generate JWT token (you'll need to import this from your auth route)
-      const jwt = require("jsonwebtoken");
-      const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
-        expiresIn: process.env.JWT_EXPIRE,
-      });
+      await user.save();      // Generate JWT token using shared function
+      const { generateToken } = require("./auth");
+      const token = generateToken(user._id, false); // Default to false for OTP logins
 
       res.status(200).json({
         success: true,
@@ -304,7 +335,7 @@ router.post(
 router.post(
   "/resend",
   [
-    checkRateLimit,
+    checkAdvancedRateLimit,
     body("email").isEmail().withMessage("Please provide a valid email"),
     body("type")
       .isIn(["email_verification", "login_2fa"])
@@ -344,12 +375,11 @@ router.post(
         }
       } catch (emailError) {
         console.error("Failed to resend OTP email:", emailError);
-      }
-
-      res.status(200).json({
+      }      res.status(200).json({
         success: true,
         message: "New verification code sent to your email",
         expiresAt: otpRecord.expiresAt,
+        rateLimitInfo: req.rateLimitInfo
       });
     } catch (error) {
       console.error("Resend OTP error:", error);

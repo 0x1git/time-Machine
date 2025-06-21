@@ -4,7 +4,7 @@ const cors = require("cors");
 const morgan = require("morgan");
 require("dotenv").config();
 
-const authRoutes = require("./routes/auth");
+const { router: authRoutes } = require("./routes/auth");
 const otpRoutes = require("./routes/otp");
 const projectRoutes = require("./routes/projects");
 const taskRoutes = require("./routes/tasks");
