@@ -7,6 +7,8 @@
 # Ignore frontend node_modules
 /time-tracker/frontend/node_modules
 
+/time-tracker/frontend/build
+
 # Ignore backend node_modules
 /time-tracker/backend/node_modules
 # Ignore environment files

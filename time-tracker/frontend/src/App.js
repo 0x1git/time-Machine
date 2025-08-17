@@ -13,7 +13,7 @@ import ForgotPassword from './components/auth/ForgotPassword';
 import Dashboard from './components/dashboard/Dashboard';
 import Projects from './components/projects/Projects';
 import Tasks from './components/tasks/Tasks';
-import Timer from './components/timer/Timer';
+import TimerPage from './components/timer/TimerPage';
 import Reports from './components/reports/Reports';
 import Settings from './components/settings/Settings';
 import Teams from './components/teams/Teams';
@@ -54,9 +54,9 @@ function App() {  return (
                   <Dashboard />
                 </ProtectedRouteWrapper>
               } />
-              <Route path="/timer" element={
+        <Route path="/timer" element={
                 <ProtectedRouteWrapper>
-                  <Timer />
+          <TimerPage />
                 </ProtectedRouteWrapper>
               } />
               <Route path="/projects" element={

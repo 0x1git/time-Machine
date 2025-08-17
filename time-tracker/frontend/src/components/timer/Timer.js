@@ -1,12 +1,14 @@
+// Note: This file is currently superseded by TimerPage.js. Kept for reference.
 import React, { useState, useEffect } from "react";
 import styled from "styled-components";
 import {
   FiPlay,
   FiPause,
-  FiSquare,
   FiClock,
   FiCoffee,
   FiCheckCircle,
+  FiTag,
+  FiDollarSign,
 } from "react-icons/fi";
 import axios from "axios";
 import { toast } from "react-toastify";
@@ -16,54 +18,100 @@ const TimerContainer = styled.div`
   margin: 0 auto;
 `;
 
-const TimerCard = styled.div`
+// Tracker bar (single section like Clockify)
+const TrackerCard = styled.div`
   background: white;
-  border-radius: 16px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
-  padding: 48px;
-  text-align: center;
-  margin-bottom: 32px;
+  border-radius: 12px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  padding: 16px 20px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 16px;
+  align-items: center;
+  margin-bottom: 24px;
+`;
+
+const TrackerLeft = styled.div`
+  min-width: 0;
+`;
+
+const DescriptionInput = styled.input`
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 14px;
+  margin-bottom: 8px;
+  &:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+  }
+`;
+
+const InlineRow = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+`;
+
+const InlineSelect = styled.select`
+  padding: 8px 10px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 13px;
+  min-width: 180px;
+  &:focus { outline: none; border-color: #3b82f6; }
+`;
+
+const InlineIcon = styled.span`
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #6b7280;
+  padding: 6px 8px;
+  border: 1px dashed #e5e7eb;
+  border-radius: 8px;
+  font-size: 13px;
 `;
 
 const TimerDisplay = styled.div`
-  font-size: 4rem;
+  font-size: 32px;
   font-weight: 700;
-  color: ${(props) => (props.isRunning ? "#28a745" : "#2c3e50")};
+  color: ${(props) => (props.isRunning ? "#dc2626" : "#16a34a")};
   font-family: "Courier New", monospace;
-  margin-bottom: 32px;
-  letter-spacing: 2px;
-
-  @media (max-width: 768px) {
-    font-size: 3rem;
-  }
+  letter-spacing: 1px;
+  text-align: right;
 `;
 
 const TimerControls = styled.div`
   display: flex;
-  justify-content: center;
-  gap: 16px;
-  margin-bottom: 32px;
+  justify-content: flex-end;
+  gap: 10px;
 `;
 
 const ControlButton = styled.button`
-  width: 64px;
-  height: 64px;
-  border-radius: 50%;
+  min-width: 80px;
+  height: 40px;
+  border-radius: 8px;
   border: none;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   transition: all 0.2s;
-  font-size: 24px;
+  font-size: 14px;
+  font-weight: 600;
+  gap: 8px;
 
   &.primary {
-    background: ${(props) => (props.isRunning ? "#dc3545" : "#28a745")};
+    background: ${(props) => (props.isRunning ? "#ef4444" : "#22c55e")};
     color: white;
 
     &:hover {
-      background: ${(props) => (props.isRunning ? "#c82333" : "#218838")};
-      transform: scale(1.05);
+      background: ${(props) => (props.isRunning ? "#dc2626" : "#16a34a")};
     }
   }
 
@@ -71,10 +119,7 @@ const ControlButton = styled.button`
     background: #6c757d;
     color: white;
 
-    &:hover {
-      background: #5a6268;
-      transform: scale(1.05);
-    }
+  &:hover { background: #5a6268; }
   }
 
   &:disabled {
@@ -243,18 +288,116 @@ const PastTimersCard = styled.div`
   background: white;
   border-radius: 16px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
-  padding: 32px;
+  padding: 20px;
   margin-bottom: 32px;
 `;
 
-const PastTimersHeader = styled.div`
+// Clockify-like entries list styles
+const EntriesContainer = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+`;
+
+const WeekHeader = styled.div`
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 24px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid #e9ecef;
+  padding: 12px 0 4px;
+  color: #6b7280;
+  font-size: 14px;
 `;
+
+const WeekTotal = styled.div`
+  font-weight: 600;
+  color: #111827;
+`;
+
+const DayGroup = styled.div`
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+`;
+
+const DayHeaderRow = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #ffffff;
+  border-top-left-radius: 10px;
+  border-top-right-radius: 10px;
+`;
+
+const DayTitle = styled.div`
+  font-weight: 600;
+  color: #111827;
+`;
+
+const DayTotal = styled.div`
+  font-family: "Courier New", monospace;
+  color: #374151;
+`;
+
+const EntriesList = styled.div`
+  display: flex;
+  flex-direction: column;
+`;
+
+const EntryRow = styled.div`
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 12px;
+  align-items: center;
+  padding: 14px 16px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #ffffff;
+
+  &:last-child {
+    border-bottom: none;
+    border-bottom-left-radius: 10px;
+    border-bottom-right-radius: 10px;
+  }
+`;
+
+const EntryLeft = styled.div`
+  min-width: 0;
+`;
+
+const EntryTitle = styled.div`
+  color: #111827;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+`;
+
+const EntrySubtitle = styled.div`
+  color: #6b7280;
+  font-size: 12px;
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+`;
+
+const EntryTimeRange = styled.div`
+  color: #6b7280;
+  font-size: 12px;
+  min-width: 140px;
+  text-align: right;
+`;
+
+const EntryDuration = styled.div`
+  font-family: "Courier New", monospace;
+  font-weight: 600;
+  color: #111827;
+  min-width: 90px;
+  text-align: right;
+`;
+
+// We keep minimal header; week header rendered inside list
 
 const PastTimersTitle = styled.h3`
   margin: 0;
@@ -404,111 +547,7 @@ const TotalTimeDisplay = styled.span`
   margin-left: 8px;
 `;
 
-// Timeline components
-const TimelineContainer = styled.div`
-  margin-top: 24px;
-  border-top: 1px solid #e9ecef;
-  padding-top: 24px;
-`;
-
-const TimelineHeader = styled.div`
-  display: flex;
-  justify-content: between;
-  align-items: center;
-  margin-bottom: 16px;
-`;
-
-const TimelineTitle = styled.h4`
-  margin: 0;
-  color: #2c3e50;
-  font-size: 1rem;
-  font-weight: 600;
-`;
-
-const ProjectFilter = styled.select`
-  padding: 8px 12px;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
-  font-size: 14px;
-  background: white;
-  margin-left: 12px;
-
-  &:focus {
-    outline: none;
-    border-color: #3498db;
-  }
-`;
-
-const TimelineView = styled.div`
-  background: #f8f9fa;
-  border-radius: 8px;
-  padding: 16px;
-  max-height: 400px;
-  overflow-y: auto;
-`;
-
-const TimelineDay = styled.div`
-  margin-bottom: 24px;
-`;
-
-const TimelineDayHeader = styled.div`
-  font-weight: 600;
-  color: #2c3e50;
-  margin-bottom: 12px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid #dee2e6;
-`;
-
-const TimelineEntry = styled.div`
-  display: flex;
-  align-items: center;
-  margin-bottom: 8px;
-  padding: 8px;
-  background: white;
-  border-radius: 6px;
-  border-left: 4px solid
-    ${(props) => (props.isBreak ? "#ff6b35" : props.color || "#28a745")};
-`;
-
-const TimelineTime = styled.div`
-  font-family: "Courier New", monospace;
-  font-size: 12px;
-  color: #666;
-  min-width: 120px;
-`;
-
-const TimelineContent = styled.div`
-  flex: 1;
-  margin-left: 12px;
-`;
-
-const TimelineProject = styled.div`
-  font-weight: 500;
-  color: #2c3e50;
-  font-size: 14px;
-`;
-
-const TimelineDuration = styled.div`
-  font-family: "Courier New", monospace;
-  font-size: 12px;
-  color: #666;
-  margin-left: 12px;
-  min-width: 60px;
-  text-align: right;
-`;
-
-const TimelineDescription = styled.div`
-  font-size: 12px;
-  color: #6c757d;
-  margin-top: 2px;
-`;
-
-const EmptyTimeline = styled.div`
-  text-align: center;
-  padding: 32px;
-  color: #6c757d;
-  font-style: italic;
-`;
+// Timeline components removed in the new design
 
 // Component for displaying total time
 const TotalTimeForProject = ({ projectId, taskId }) => {
@@ -552,9 +591,7 @@ const Timeline = ({ selectedProject }) => {
   const [timelineData, setTimelineData] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    fetchTimelineData();
-  }, [selectedProject]);
+  // removed: timeline effect
 
   const fetchTimelineData = async () => {
     setLoading(true);
@@ -654,101 +691,86 @@ const Timeline = ({ selectedProject }) => {
                   {entry.description && (
                     <TimelineDescription>
                       {entry.description}
-                    </TimelineDescription>
-                  )}
-                </TimelineContent>
-                <TimelineDuration>
-                  {formatTime(entry.duration || 0)}
-                </TimelineDuration>
-              </TimelineEntry>
-            ))}
-          </TimelineDay>
-        ))
-      ) : (
-        <EmptyTimeline>
-          No timeline data found for the selected period.
-        </EmptyTimeline>
-      )}
-    </TimelineView>
-  );
-};
+                    // Timeline component removed in the new design
+      });
+      const today = new Date();
+      const yesterday = new Date();
+      yesterday.setDate(today.getDate() - 1);
 
-const Timer = () => {
-  const [isRunning, setIsRunning] = useState(false);
-  const [elapsedTime, setElapsedTime] = useState(0);
-  const [runningEntry, setRunningEntry] = useState(null);
-  const [pausedTime, setPausedTime] = useState(0); // Track accumulated time when paused
-  const [projects, setProjects] = useState([]);
-  const [tasks, setTasks] = useState([]);
-  const [activeBreak, setActiveBreak] = useState(null);
-  const [breakType, setBreakType] = useState("other");
-  const [pastTimers, setPastTimers] = useState([]);
-  const [showPastTimers, setShowPastTimers] = useState(true);
-  const [showTimeline, setShowTimeline] = useState(false);
-  const [selectedTimelineProject, setSelectedTimelineProject] = useState("");
-  const [formData, setFormData] = useState({
-    project: "",
-    task: "",
-    description: "",
-  });
-  const [selectedProject, setSelectedProject] = useState("");
-  const [timelineData, setTimelineData] = useState({});
-  const [loadingTimeline, setLoadingTimeline] = useState(false);
+      const groupsMap = entries.reduce((acc, e) => {
+        const d = new Date(e.startTime);
+        // Today/Yesterday labels for current week
+        const sameDay = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+        const key = sameDay(d, today) ? 'Today' : sameDay(d, yesterday) ? 'Yesterday' : formatter.format(d);
+        if (!acc[key]) acc[key] = { key, date: d, items: [], total: 0 };
+        acc[key].items.push(e);
+        acc[key].total += e.duration || 0;
+        return acc;
+      }, {});
 
-  useEffect(() => {
-    fetchProjects();
-    checkRunningTimer();
-    fetchPastTimers();
-  }, []);
+      // sort days descending (latest first), and inside items by start desc
+      const groups = Object.values(groupsMap)
+        .sort((a, b) => b.date - a.date)
+        .map((g) => ({
+          ...g,
+          items: g.items.sort((a, b) => new Date(b.startTime) - new Date(a.startTime)),
+        }));
 
-  useEffect(() => {
-    if (formData.project) {
-      fetchTasks(formData.project);
-    } else {
-      setTasks([]);
-    }
-  }, [formData.project]);
-
-  useEffect(() => {
-    let interval;
-    if (isRunning && runningEntry && !activeBreak) {
-      interval = setInterval(() => {
-        if (pausedTime > 0 && runningEntry.resumeTime) {
-          // If we resumed from a break, continue from pausedTime
-          const resumeTime = new Date(runningEntry.resumeTime);
-          const now = new Date();
-          const additionalTime = Math.floor((now - resumeTime) / 1000);
-          setElapsedTime(pausedTime + additionalTime);
-        } else {
-          // Normal counting from start
-          const startTime = new Date(runningEntry.startTime);
-          const now = new Date();
-          setElapsedTime(Math.floor((now - startTime) / 1000));
-        }
-      }, 1000);
-    }
-    return () => clearInterval(interval);
-  }, [isRunning, runningEntry, pausedTime, activeBreak]);
-
-  useEffect(() => {
-    fetchTimelineData();
-  }, [selectedProject]);
-
-  const fetchProjects = async () => {
-    try {
-      const response = await axios.get("/projects");
-      setProjects(response.data);
-    } catch (error) {
-      console.error("Error fetching projects:", error);
+      const weekTotal = entries.reduce((s, e) => s + (e.duration || 0), 0);
+      setWeekEntries({ groups, weekTotal, loading: false });
+    } catch (err) {
+      console.error('Error fetching week entries', err);
+      setWeekEntries({ groups: [], weekTotal: 0, loading: false });
     }
   };
 
-  const fetchTasks = async (projectId) => {
+  // Last week range (previous Mon-Sun)
+  const getLastWeekRange = () => {
+    const { start, end } = getCurrentWeekRange();
+    const lastStart = new Date(start);
+    const lastEnd = new Date(end);
+    lastStart.setDate(start.getDate() - 7);
+    lastEnd.setDate(end.getDate() - 7);
+    return { start: lastStart, end: lastEnd };
+  };
+
+  const fetchLastWeekEntries = async () => {
+    setLastWeekEntries((prev) => ({ ...prev, loading: true }));
     try {
-      const response = await axios.get(`/tasks?project=${projectId}`);
-      setTasks(response.data);
-    } catch (error) {
-      console.error("Error fetching tasks:", error);
+      const { start, end } = getLastWeekRange();
+      const params = new URLSearchParams({
+        startDate: start.toISOString(),
+        endDate: end.toISOString(),
+        limit: 200,
+      });
+      const res = await axios.get(`/time-entries?${params.toString()}`);
+      const entries = res.data.timeEntries.filter((e) => !e.isRunning);
+
+      const formatter = new Intl.DateTimeFormat(undefined, {
+        weekday: 'short', month: 'short', day: '2-digit'
+      });
+
+      const groupsMap = entries.reduce((acc, e) => {
+        const d = new Date(e.startTime);
+        const key = formatter.format(d);
+        if (!acc[key]) acc[key] = { key, date: d, items: [], total: 0 };
+        acc[key].items.push(e);
+        acc[key].total += e.duration || 0;
+        return acc;
+      }, {});
+
+      const groups = Object.values(groupsMap)
+        .sort((a, b) => b.date - a.date)
+        .map((g) => ({
+          ...g,
+          items: g.items.sort((a, b) => new Date(b.startTime) - new Date(a.startTime)),
+        }));
+
+      const weekTotal = entries.reduce((s, e) => s + (e.duration || 0), 0);
+      setLastWeekEntries({ groups, weekTotal, loading: false });
+    } catch (err) {
+      console.error('Error fetching last week entries', err);
+      setLastWeekEntries({ groups: [], weekTotal: 0, loading: false });
     }
   };
 
@@ -834,7 +856,9 @@ const Timer = () => {
       setIsRunning(true);
       setElapsedTime(0);
       setPausedTime(0); // Reset paused time for new timer
-      setActiveBreak(null); // Ensure no active break state
+  setActiveBreak(null); // Ensure no active break state
+  fetchWeekEntries();
+  fetchLastWeekEntries();
       toast.success("Timer started!");
     } catch (error) {
       toast.error("Failed to start timer");
@@ -853,7 +877,8 @@ const Timer = () => {
       setPausedTime(0); // Reset paused time
       setActiveBreak(null); // Clear any active break
       setFormData({ project: "", task: "", description: "" });
-      fetchPastTimers(); // Refresh past timers after stopping
+  fetchWeekEntries();
+  fetchLastWeekEntries();
       toast.success("Timer stopped!");
     } catch (error) {
       toast.error("Failed to stop timer");
@@ -884,7 +909,7 @@ const Timer = () => {
       // Start the break without stopping the timer
       const response = await axios.post("/breaks/start", {
         timeEntryId: runningEntry._id,
-        breakType: breakType,
+        breakType: 'other',
       });
 
       // Pause the timer and store the current elapsed time
@@ -892,11 +917,7 @@ const Timer = () => {
       setPausedTime(elapsedTime); // Store the time when we paused
       setActiveBreak(response.data);
 
-      toast.success(
-        `${
-          breakType.charAt(0).toUpperCase() + breakType.slice(1)
-        } break started! Timer paused.`
-      );
+  toast.success('Break started! Timer paused.');
     } catch (error) {
       toast.error(error.response?.data?.message || "Failed to start break");
       console.error("Error starting break:", error);
@@ -961,6 +982,8 @@ const Timer = () => {
         fetchTasks(pastEntry.project._id);
       }
 
+  fetchWeekEntries();
+  fetchLastWeekEntries();
       toast.success("Timer continued!");
     } catch (error) {
       toast.error("Failed to continue timer");
@@ -968,36 +991,7 @@ const Timer = () => {
     }
   };
 
-  const fetchPastTimers = async () => {
-    try {
-      const response = await axios.get("/time-entries?limit=20");
-      // Filter out currently running timer
-      const pastEntries = response.data.timeEntries.filter(
-        (entry) => !entry.isRunning
-      );
-
-      // Group by project+task combination and keep only the most recent entry for each combination
-      const grouped = {};
-      pastEntries.forEach((entry) => {
-        const key = `${entry.project._id}-${entry.task?._id || "notask"}`;
-        if (
-          !grouped[key] ||
-          new Date(entry.startTime) > new Date(grouped[key].startTime)
-        ) {
-          grouped[key] = entry;
-        }
-      });
-
-      // Convert back to array and sort by most recent
-      const uniqueEntries = Object.values(grouped)
-        .sort((a, b) => new Date(b.startTime) - new Date(a.startTime))
-        .slice(0, 10); // Keep only top 10
-
-      setPastTimers(uniqueEntries);
-    } catch (error) {
-      console.error("Error fetching past timers:", error);
-    }
-  };
+  // Removed compact past-timers fetching (not used in new UI)
 
   const fetchTimelineData = async () => {
     setLoadingTimeline(true);
@@ -1114,6 +1108,8 @@ const Timer = () => {
         fetchTasks(lastEntry.project._id);
       }
 
+  fetchWeekEntries();
+  fetchLastWeekEntries();
       toast.success(
         `Resumed: ${lastEntry.project.name}${
           lastEntry.task ? ` - ${lastEntry.task.name}` : ""
@@ -1127,221 +1123,170 @@ const Timer = () => {
 
   return (
     <TimerContainer>
-      {/* Past Timers Section */}
-      <PastTimersCard>
-        <PastTimersHeader>
-          <PastTimersTitle>Recent Timers</PastTimersTitle>
-          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-            <ToggleButton onClick={() => setShowTimeline(!showTimeline)}>
-              {showTimeline ? "Show List" : "Show Timeline"}
-            </ToggleButton>
-            <ToggleButton onClick={() => setShowPastTimers(!showPastTimers)}>
-              {showPastTimers ? "Hide" : "Show"}
-            </ToggleButton>
-          </div>
-        </PastTimersHeader>
-
-        {showPastTimers && !showTimeline && (
-          <PastTimersList>
-            {pastTimers.length > 0 ? (
-              pastTimers.map((timer) => (
-                <PastTimerItem key={timer._id}>
-                  <PastTimerInfo>
-                    <PastTimerProject>
-                      <ProjectColorDot color={timer.project?.color} />
-                      {timer.project?.name}
-                      <TotalTimeForProject
-                        projectId={timer.project._id}
-                        taskId={timer.task?._id}
-                      />
-                    </PastTimerProject>
-                    {timer.task && (
-                      <PastTimerTask>Task: {timer.task.name}</PastTimerTask>
-                    )}
-                    {timer.description && (
-                      <PastTimerDescription title={timer.description}>
-                        {timer.description}
-                      </PastTimerDescription>
-                    )}
-                    <PastTimerMeta>
-                      <span>
-                        {new Date(timer.startTime).toLocaleDateString()} •
-                        {new Date(timer.startTime).toLocaleTimeString()} -
-                        {timer.endTime &&
-                          new Date(timer.endTime).toLocaleTimeString()}
-                      </span>
-                    </PastTimerMeta>
-                  </PastTimerInfo>
-                  <PastTimerActions>
-                    <PastTimerDuration>
-                      {formatTime(timer.duration)}
-                    </PastTimerDuration>
-                    <ContinueButton
-                      onClick={() => continueTimer(timer)}
-                      disabled={isRunning}
-                    >
-                      <FiPlay size={14} />
-                      Continue
-                    </ContinueButton>
-                  </PastTimerActions>
-                </PastTimerItem>
-              ))
-            ) : (
-              <EmptyPastTimers>
-                No past timers found. Start your first timer below!
-              </EmptyPastTimers>
-            )}
-          </PastTimersList>
-        )}
-
-        {showPastTimers && showTimeline && (
-          <TimelineContainer>
-            <TimelineHeader>
-              <TimelineTitle>Timeline View</TimelineTitle>
-              <ProjectFilter
-                value={selectedTimelineProject}
-                onChange={(e) => setSelectedTimelineProject(e.target.value)}
-              >
-                <option value="">All Projects</option>
-                {projects.map((project) => (
-                  <option key={project._id} value={project._id}>
-                    {project.name}
-                  </option>
-                ))}
-              </ProjectFilter>
-            </TimelineHeader>
-            <Timeline selectedProject={selectedTimelineProject} />
-          </TimelineContainer>
-        )}
-      </PastTimersCard>
-
-      <TimerCard>
-        <TimerDisplay isRunning={isRunning}>
-          {formatTime(elapsedTime)}
-        </TimerDisplay>
-        <TimerControls>
-          <ControlButton
-            className="primary"
-            isRunning={isRunning}
-            onClick={isRunning ? stopTimer : startTimer}
-            disabled={!isRunning && !formData.project}
-          >
-            {isRunning ? <FiPause /> : <FiPlay />}
-          </ControlButton>
-        </TimerControls>{" "}
-        {runningEntry && (
-          <CurrentActivity>
-            <ActivityTitle>
-              <FiClock style={{ marginRight: "8px" }} />
-              Currently tracking: {runningEntry.project?.name}
-            </ActivityTitle>
-            <ActivityMeta>
-              {runningEntry.task?.name && `Task: ${runningEntry.task.name} • `}
-              Started: {new Date(runningEntry.startTime).toLocaleTimeString()}
-            </ActivityMeta>
-          </CurrentActivity>
-        )}
-        {/* Break Controls */}
-        {runningEntry && (
-          <BreakCard isOnBreak={!!activeBreak}>
-            <BreakStatus isOnBreak={!!activeBreak}>
-              <FiCoffee />
-              {activeBreak ? "On Break" : "Ready for Break"}
-            </BreakStatus>
-
-            {activeBreak ? (
-              <div>
-                <div
-                  style={{ marginTop: "8px", fontSize: "14px", color: "#666" }}
-                >
-                  Break Type: {activeBreak.breakType} • Started:{" "}
-                  {new Date(activeBreak.startTime).toLocaleTimeString()}
-                </div>
-                <BreakControls>
-                  <BreakButton className="end-break" onClick={endBreak}>
-                    <FiCheckCircle size={16} />
-                    End Break
-                  </BreakButton>
-                </BreakControls>
-              </div>
-            ) : (
-              <BreakControls>
-                <BreakTypeSelect
-                  value={breakType}
-                  onChange={(e) => setBreakType(e.target.value)}
-                >
-                  <option value="coffee">Coffee Break</option>
-                  <option value="lunch">Lunch Break</option>
-                  <option value="personal">Personal Break</option>
-                  <option value="meeting">Meeting</option>
-                  <option value="other">Other</option>
-                </BreakTypeSelect>
-                <BreakButton className="start-break" onClick={startBreak}>
-                  <FiCoffee size={16} />
-                  Start Break
-                </BreakButton>
-              </BreakControls>
-            )}
-          </BreakCard>
-        )}
-        {/* Resume Last Task - shown when no timer is running and no active break */}
-        {!isRunning && !activeBreak && (
-          <BreakCard>
-            <BreakStatus>
-              <FiClock />
-              Quick Actions
-            </BreakStatus>
-            <BreakControls>
-              <BreakButton className="end-break" onClick={resumeLastTask}>
-                <FiPlay size={16} />
-                Resume Last Task
-              </BreakButton>
-            </BreakControls>
-          </BreakCard>
-        )}
-        <TimerForm>
-          <FormGroup>
-            <Label>Project *</Label>
-            <Select
+      {/* Tracker bar */}
+      <TrackerCard>
+        <TrackerLeft>
+          <DescriptionInput
+            value={formData.description}
+            onChange={(e) => handleFormChange('description', e.target.value)}
+            placeholder="What are you working on?"
+          />
+          <InlineRow>
+            <InlineSelect
               value={formData.project}
-              onChange={(e) => handleFormChange("project", e.target.value)}
+              onChange={(e) => handleFormChange('project', e.target.value)}
               disabled={isRunning}
             >
-              <option value="">Select a project</option>
-              {projects.map((project) => (
-                <option key={project._id} value={project._id}>
-                  {project.name}
-                </option>
+              <option value="">Select project</option>
+              {projects.map((p) => (
+                <option key={p._id} value={p._id}>{p.name}</option>
               ))}
-            </Select>
-          </FormGroup>
-
-          <FormGroup>
-            <Label>Task (Optional)</Label>
-            <Select
+            </InlineSelect>
+            <InlineSelect
               value={formData.task}
-              onChange={(e) => handleFormChange("task", e.target.value)}
+              onChange={(e) => handleFormChange('task', e.target.value)}
               disabled={isRunning || !formData.project}
             >
-              <option value="">Select a task</option>
-              {tasks.map((task) => (
-                <option key={task._id} value={task._id}>
-                  {task.name}
-                </option>
+              <option value="">Select task</option>
+              {tasks.map((t) => (
+                <option key={t._id} value={t._id}>{t.name}</option>
               ))}
-            </Select>
-          </FormGroup>
+            </InlineSelect>
+            <InlineIcon><FiTag size={14}/> tags</InlineIcon>
+            <InlineIcon><FiDollarSign size={14}/> billable</InlineIcon>
+          </InlineRow>
+        </TrackerLeft>
+        <div>
+          <TimerDisplay isRunning={isRunning}>{formatTime(elapsedTime)}</TimerDisplay>
+          <TimerControls>
+            {runningEntry && !activeBreak ? (
+              <ControlButton className="secondary" onClick={startBreak}><FiCoffee/> Break</ControlButton>
+            ) : null}
+            {activeBreak ? (
+              <ControlButton className="secondary" onClick={endBreak}><FiCheckCircle/> End break</ControlButton>
+            ) : null}
+            <ControlButton
+              className="primary"
+              isRunning={isRunning}
+              onClick={isRunning ? stopTimer : startTimer}
+              disabled={!isRunning && !formData.project}
+            >
+              {isRunning ? (<><FiPause/> Stop</>) : (<><FiPlay/> Start</>)}
+            </ControlButton>
+          </TimerControls>
+        </div>
+      </TrackerCard>
 
-          <FormGroup>
-            <Label>Description</Label>
-            <Textarea
-              value={formData.description}
-              onChange={(e) => handleFormChange("description", e.target.value)}
-              placeholder="What are you working on?"
-            />
-          </FormGroup>
-        </TimerForm>
-      </TimerCard>
+      {/* Past Timers Section */}
+      <PastTimersCard>
+        <PastTimersTitle style={{margin:'0 0 12px', fontSize:'16px'}}>This week</PastTimersTitle>
+
+  <EntriesContainer>
+            <WeekHeader>
+              <div></div>
+              <WeekTotal>{formatTime(weekEntries.weekTotal)}</WeekTotal>
+            </WeekHeader>
+
+            {weekEntries.loading ? (
+              <EmptyPastTimers>Loading week entries…</EmptyPastTimers>
+            ) : weekEntries.groups.length === 0 ? (
+              <EmptyPastTimers>No entries this week.</EmptyPastTimers>
+            ) : (
+              weekEntries.groups.map((g) => (
+                <DayGroup key={g.key}>
+                  <DayHeaderRow>
+                    <DayTitle>{g.key}</DayTitle>
+                    <DayTotal>{formatTime(g.total)}</DayTotal>
+                  </DayHeaderRow>
+                  <EntriesList>
+                    {g.items.map((timer) => (
+                      <EntryRow key={timer._id}>
+                        <EntryLeft>
+                          <EntryTitle>
+                            {timer.project?.name}
+                            {timer.task ? ` · ${timer.task.name}` : ""}
+                          </EntryTitle>
+                          {timer.description && (
+                            <EntrySubtitle title={timer.description}>
+                              {timer.description}
+                            </EntrySubtitle>
+                          )}
+                        </EntryLeft>
+                        <EntryTimeRange>
+                          {new Date(timer.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          {" - "}
+                          {timer.endTime ? new Date(timer.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "--:--"}
+                        </EntryTimeRange>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                          <EntryDuration>{formatTime(timer.duration || 0)}</EntryDuration>
+                          <ContinueButton onClick={() => continueTimer(timer)} disabled={isRunning}>
+                            <FiPlay size={14} />
+                            Continue
+                          </ContinueButton>
+                        </div>
+                      </EntryRow>
+                    ))}
+                  </EntriesList>
+                </DayGroup>
+              ))
+            )}
+          </EntriesContainer>
+      </PastTimersCard>
+
+      {/* Last Week Section */}
+      <PastTimersCard>
+        <PastTimersTitle style={{margin:'0 0 12px', fontSize:'16px'}}>Last week</PastTimersTitle>
+        <EntriesContainer>
+          <WeekHeader>
+            <div></div>
+            <WeekTotal>{formatTime(lastWeekEntries.weekTotal)}</WeekTotal>
+          </WeekHeader>
+
+          {lastWeekEntries.loading ? (
+            <EmptyPastTimers>Loading last week…</EmptyPastTimers>
+          ) : lastWeekEntries.groups.length === 0 ? (
+            <EmptyPastTimers>No entries last week.</EmptyPastTimers>
+          ) : (
+            lastWeekEntries.groups.map((g) => (
+              <DayGroup key={`last-${g.key}`}>
+                <DayHeaderRow>
+                  <DayTitle>{g.key}</DayTitle>
+                  <DayTotal>{formatTime(g.total)}</DayTotal>
+                </DayHeaderRow>
+                <EntriesList>
+                  {g.items.map((timer) => (
+                    <EntryRow key={timer._id}>
+                      <EntryLeft>
+                        <EntryTitle>
+                          {timer.project?.name}
+                          {timer.task ? ` · ${timer.task.name}` : ""}
+                        </EntryTitle>
+                        {timer.description && (
+                          <EntrySubtitle title={timer.description}>
+                            {timer.description}
+                          </EntrySubtitle>
+                        )}
+                      </EntryLeft>
+                      <EntryTimeRange>
+                        {new Date(timer.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        {" - "}
+                        {timer.endTime ? new Date(timer.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "--:--"}
+                      </EntryTimeRange>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <EntryDuration>{formatTime(timer.duration || 0)}</EntryDuration>
+                        <ContinueButton onClick={() => continueTimer(timer)} disabled={isRunning}>
+                          <FiPlay size={14} />
+                          Continue
+                        </ContinueButton>
+                      </div>
+                    </EntryRow>
+                  ))}
+                </EntriesList>
+              </DayGroup>
+            ))
+          )}
+        </EntriesContainer>
+      </PastTimersCard>
     </TimerContainer>
   );
 };
